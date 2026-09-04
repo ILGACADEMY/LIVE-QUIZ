@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { toQuestionRow } from "@/lib/question-fields";
 
 // POST /api/quizzes/:id/duplicate — independent copy of quiz + all questions.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (qError) return NextResponse.json({ error: qError.message }, { status: 500 });
 
   if (originalQuestions && originalQuestions.length > 0) {
-    const rows = originalQuestions.map(({ id, quiz_id, ...rest }) => ({ ...rest, quiz_id: copy.id }));
+    const rows = originalQuestions.map((q, i) => toQuestionRow(q, copy.id, i));
     const { error: insError } = await supabaseAdmin.from("questions").insert(rows);
     if (insError) return NextResponse.json({ error: insError.message }, { status: 500 });
   }

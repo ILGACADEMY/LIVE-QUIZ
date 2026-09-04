@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { toQuestionRow } from "@/lib/question-fields";
 
 // GET /api/quizzes/:id — quiz + full question list, for the editor/preview
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
@@ -59,10 +60,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (delError) return NextResponse.json({ error: delError.message }, { status: 500 });
 
     if (questions.length > 0) {
-      const rows = questions.map((q, i) => {
-        const { id, ...rest } = q as Record<string, unknown> & { id?: string };
-        return { ...rest, quiz_id: params.id, order_index: i };
-      });
+      const rows = questions.map((q, i) => toQuestionRow(q, params.id, i));
       const { error: insError } = await supabaseAdmin.from("questions").insert(rows);
       if (insError) return NextResponse.json({ error: insError.message }, { status: 500 });
     }
