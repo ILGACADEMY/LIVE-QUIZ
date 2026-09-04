@@ -59,7 +59,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     if (delError) return NextResponse.json({ error: delError.message }, { status: 500 });
 
     if (questions.length > 0) {
-      const rows = questions.map((q, i) => ({ ...q, quiz_id: params.id, order_index: i, id: undefined }));
+      const rows = questions.map((q, i) => {
+        const { id, ...rest } = q as Record<string, unknown> & { id?: string };
+        return { ...rest, quiz_id: params.id, order_index: i };
+      });
       const { error: insError } = await supabaseAdmin.from("questions").insert(rows);
       if (insError) return NextResponse.json({ error: insError.message }, { status: 500 });
     }

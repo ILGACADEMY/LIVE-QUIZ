@@ -7,15 +7,20 @@ export interface ScoreResult {
   questionScore: number;
 }
 
+const MAX_SPEED_BONUS = 10;
+
 /**
  * Server-authoritative scoring. `elapsedMs` MUST be computed from a
  * server-recorded question-start timestamp and the moment the server
- * received the submission — never trust a client-reported elapsed time
- * (spec §11, §43).
+ * received the submission — never trust a client-reported elapsed time.
  *
- * SPEED BONUS = whole remaining seconds in the configured window, only if
- * the answer is correct (spec §9). A correct answer submitted at or after
- * the window has elapsed still earns its 1 base point, just 0 bonus.
+ * SPEED BONUS: a correct answer earns 1 base point plus up to 10 bonus
+ * points, scaling linearly down to 0 across the configured window. At the
+ * default 20-second window this is exactly 0.5 points lost per second
+ * (10 pts at 0s elapsed → 0 pts at 20s elapsed). For any other window the
+ * same 0-to-10 range is scaled proportionally across that window's length.
+ * Wrong answers always score 0, regardless of speed. Bonus is rounded to
+ * the nearest 0.5 point.
  */
 export function scoreAnswer(params: {
   selectedOption: string;
@@ -33,18 +38,19 @@ export function scoreAnswer(params: {
 
   const baseScore = 1;
 
-  if (scoringMode !== "speed_bonus") {
+  if (scoringMode !== "speed_bonus" || speedBonusWindowSeconds <= 0) {
     return { isCorrect: true, baseScore, speedBonus: 0, questionScore: baseScore };
   }
 
   const elapsedSeconds = elapsedMs / 1000;
-  const remaining = Math.max(0, speedBonusWindowSeconds - elapsedSeconds);
-  const speedBonus = Math.floor(remaining); // whole seconds remaining, per spec example table
+  const remainingSeconds = Math.max(0, speedBonusWindowSeconds - elapsedSeconds);
+  const rawBonus = (remainingSeconds / speedBonusWindowSeconds) * MAX_SPEED_BONUS;
+  const speedBonus = Math.round(rawBonus * 2) / 2; // nearest 0.5
 
   return {
     isCorrect: true,
     baseScore,
     speedBonus,
-    questionScore: baseScore + speedBonus
+    questionScore: Math.round((baseScore + speedBonus) * 2) / 2
   };
 }

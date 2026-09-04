@@ -172,9 +172,17 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           <>
             <div className="flex items-center justify-between mt-10 mb-4">
               <p className="field-label">Full ranking (private — admin only)</p>
-              <button onClick={generateAnalysis} disabled={analysisLoading} className="btn-ghost text-sm px-4 py-2">
-                {analysisLoading ? "Analyzing…" : "Generate AI analysis"}
-              </button>
+              <div className="flex gap-2">
+                <a href={`/api/sessions/${sessionId}/export?type=leaderboard`} className="btn-ghost text-sm px-4 py-2">
+                  Download leaderboard (CSV)
+                </a>
+                <a href={`/api/sessions/${sessionId}/export?type=answers`} className="btn-ghost text-sm px-4 py-2">
+                  Download answer sheet (CSV)
+                </a>
+                <button onClick={generateAnalysis} disabled={analysisLoading} className="btn-gold text-sm px-4 py-2">
+                  {analysisLoading ? "Analyzing…" : "Generate AI analysis"}
+                </button>
+              </div>
             </div>
 
             {analysis && <div className="case-panel p-6 mb-6 text-sm text-parchment/70 leading-relaxed">{analysis}</div>}

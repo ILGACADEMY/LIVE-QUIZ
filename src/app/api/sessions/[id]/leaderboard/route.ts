@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: rows, error } = await supabaseAdmin
     .from("participants")
-    .select("id, name, total_score, base_score, speed_score, completed_at, joined_at")
+    .select("id, name, avatar, total_score, base_score, speed_score, completed_at, joined_at")
     .eq("session_id", params.id)
     .not("completed_at", "is", null)
     .order("total_score", { ascending: false })
@@ -30,6 +30,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       leaderboard: ranked.map((r) => ({
         rank: r.rank,
         name: r.name,
+        avatar: r.avatar,
         totalScore: r.total_score,
         baseScore: r.base_score,
         speedBonus: r.speed_score,
@@ -41,6 +42,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const top10 = ranked.slice(0, 10).map((r) => ({
     rank: r.rank,
     name: r.name,
+    avatar: r.avatar,
     score: r.total_score
   }));
 

@@ -26,6 +26,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const [phase, setPhase] = useState<Phase>("loading");
   const [participantId, setParticipantId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [avatar, setAvatar] = useState("🦉");
   const [countdownSeconds, setCountdownSeconds] = useState(3);
   const [q, setQ] = useState<QuestionState | null>(null);
   const [selected, setSelected] = useState<OptionKey | null>(null);
@@ -70,6 +71,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     const parsed = JSON.parse(raw);
     setParticipantId(parsed.participantId);
     setName(parsed.name);
+    if (parsed.avatar) setAvatar(parsed.avatar);
   }, [params.sessionId, router]);
 
   // Waiting room: poll as a fallback, and listen for the synced start broadcast.
@@ -158,6 +160,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
         <p className="text-gold text-xs tracking-[0.2em] mb-4">YOU&rsquo;RE IN</p>
+        <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
         <p className="text-parchment/50">Waiting for the instructor to start…</p>
       </main>

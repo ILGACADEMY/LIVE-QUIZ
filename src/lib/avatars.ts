@@ -1,0 +1,19 @@
+// A simple emoji "cartoon character" system — no image generation needed,
+// renders identically on iOS and Android, and every participant gets a fun
+// visual identity even if they skip typing a name.
+export const AVATARS = ["🦉", "🦊", "🦁", "🐼", "🐯", "🦅", "🐨", "🐺", "🦈", "🐧", "🦖", "🐢"];
+
+const GUEST_ADJECTIVES = ["Swift", "Golden", "Silver", "Bold", "Sharp", "Bright", "Steady", "Quick", "Steel", "Royal"];
+const GUEST_NOUNS = ["Falcon", "Compass", "Tourbillon", "Chrono", "Pilot", "Diver", "Sapphire", "Bezel", "Pinion", "Escapement"];
+
+export function randomAvatar(): string {
+  return AVATARS[Math.floor(Math.random() * AVATARS.length)];
+}
+
+/** Used when a participant joins without typing a name (spec: guest join). */
+export function randomGuestName(): string {
+  const adj = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)];
+  const noun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)];
+  const num = Math.floor(Math.random() * 90) + 10;
+  return `${adj} ${noun} ${num}`;
+}

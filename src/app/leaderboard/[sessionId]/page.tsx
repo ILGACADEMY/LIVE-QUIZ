@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 interface Row {
   rank: number;
   name: string;
+  avatar?: string;
   score: number;
 }
 
@@ -55,6 +56,7 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
           >
             <div className="flex items-center gap-6">
               <span className="font-dial text-2xl w-12 text-gold">{MEDALS[row.rank - 1] ?? row.rank}</span>
+              {row.avatar && <span className="text-2xl">{row.avatar}</span>}
               <span className="font-display italic text-2xl">{row.name}</span>
             </div>
             <span className="font-dial text-3xl text-gold">{row.score}</span>

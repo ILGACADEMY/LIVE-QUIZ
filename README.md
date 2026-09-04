@@ -110,10 +110,16 @@ In the builder: fill in the question text, optionally upload an image (JPG/PNG/W
 From **My Quizzes**, click **Duplicate** on any quiz — you get an independent copy you can safely edit without affecting the original.
 
 ### Configure scoring
-In the builder's **Scoring mode** section, pick **Standard** (correct = 1 point, no bonus) or **Speed bonus** (correct = 1 point + whole seconds remaining in the configured window). Pick a window of 5/10/15/20/30 seconds, or **Custom**.
+In the builder's **Scoring mode** section, pick **Standard** (correct = 1 point, no bonus) or **Speed bonus** (correct = 1 point + up to 10 points for speed). Pick a window of 5/10/15/20/30 seconds, or **Custom**.
 
 ### How the speed bonus actually works
-With a 20-second window: answering correctly with 18 seconds left scores `1 + 18 = 19` points; with 8 seconds left, `1 + 8 = 9` points; a wrong answer always scores `0`, regardless of speed. The "seconds left" is measured server-side from the moment the question was shown to that participant to the moment their answer arrived at the server — never from their phone's clock.
+Every correct answer earns 1 base point, plus up to 10 speed points that scale down linearly across the configured window — at the default 20-second window that's exactly 0.5 points lost per second (10 pts if answered instantly → 0 pts right at the 20s mark), in half-point steps. A wrong answer always scores 0, no matter how fast. The "time remaining" is measured server-side from the moment the question was shown to that participant to the moment their answer arrived at the server — never from their phone's clock. Choosing a different window (e.g. 10s) keeps the same 0-to-10 point range but scales the rate accordingly (1 point/second at a 10s window). The on-screen timer dial turns red and blinks for the last 5 seconds regardless of window length.
+
+### Joining without typing a name
+The name field on the join screen is optional — leaving it blank assigns a fun guest name (e.g. "Golden Falcon 42") automatically. Every participant also gets a random cartoon-style avatar (an emoji) shown next to their name in the waiting room, on their own quiz screen, and on the leaderboard — tap the avatar on the join screen to re-roll it before joining.
+
+### Multi-language questions
+On the join screen, participants pick their language (defaults to a best-guess from their phone's own language setting — currently English, Arabic, Hindi, Urdu, Tagalog, French, Russian, Chinese, and Spanish; add more in `src/lib/languages.ts`). Their questions are then shown in that language — translated once per (session, question, language) by AI and cached, so 300 people picking the same language only trigger one translation per question, not 300. The presenter/admin dashboard and the projector leaderboard always stay in English regardless of what participants chose.
 
 ### Preview before launching
 Click **Preview** from My Quizzes or the builder. It walks through the real participant flow (timer, image, answer locking, scoring) using your saved questions, without creating a live session or touching any real participant data.
@@ -153,6 +159,10 @@ Every session gets a `delete_at` timestamp 24 hours after it ends (or 24 hours a
   ```
 
 You can also click **Delete session** on the admin dashboard at any time to purge a session immediately, ahead of the 24-hour window.
+
+### Downloading results
+- **Participants**: on their results screen, a **"Download my results (PDF)"** button opens the browser's print dialog styled as a clean scorecard — they choose "Save as PDF" (or print it). Their name, score, rank, and every question with their answer, the correct answer, and the explanation is included.
+- **Admin**: once a session is finished, the dashboard has **"Download leaderboard (CSV)"** (one row per participant: rank, name, score breakdown, pass/fail, time) and **"Download answer sheet (CSV)"** (one row per participant per question: their answer, the correct answer, correct/incorrect, points). Both open directly in Excel or Google Sheets.
 
 ### Changing ILG branding
 The visual identity lives in two places: `tailwind.config.ts` (the `charcoal` / `graphite` / `gold` / `ivory` color tokens and the three font variables) and `src/app/layout.tsx` (which Google Fonts are loaded — currently Fraunces for headings, Manrope for body text, Space Grotesk for the chronograph-style numerals). Change the hex values or swap the fonts there and every page picks it up automatically. The wordmark text ("ILG ACADEMY") appears inline in each page component if you want to replace it with a logo image.

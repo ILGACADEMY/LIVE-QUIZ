@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession, PublicQuestion } from "@/lib/types";
+import { translateQuestion } from "@/lib/ai";
+import { languageName } from "@/lib/languages";
 
 function toPublicQuestion(session: LiveSession, index: number): PublicQuestion | null {
   const q = session.quiz_snapshot.questions[index];
@@ -16,6 +18,62 @@ function toPublicQuestion(session: LiveSession, index: number): PublicQuestion |
     category: q.category,
     difficulty: q.difficulty
   };
+}
+
+/**
+ * Returns the question in the participant's chosen language. English
+ * participants (and the presenter/admin/leaderboard screens, which never
+ * pass a non-English language) skip this entirely. For anyone else, we
+ * check the cache first — only the very first participant in a session to
+ * request a given language for a given question triggers an AI call; every
+ * participant after that reads the cached row.
+ */
+async function toLocalizedQuestion(session: LiveSession, index: number, language: string): Promise<PublicQuestion | null> {
+  const base = toPublicQuestion(session, index);
+  if (!base || language === "en") return base;
+
+  const { data: cached } = await supabaseAdmin
+    .from("question_translations")
+    .select("*")
+    .eq("session_id", session.id)
+    .eq("question_index", index)
+    .eq("language_code", language)
+    .maybeSingle();
+
+  if (cached) {
+    return { ...base, question_text: cached.question_text, option_a: cached.option_a, option_b: cached.option_b, option_c: cached.option_c, option_d: cached.option_d };
+  }
+
+  try {
+    const translated = await translateQuestion({
+      languageName: languageName(language),
+      questionText: base.question_text,
+      optionA: base.option_a,
+      optionB: base.option_b,
+      optionC: base.option_c,
+      optionD: base.option_d
+    });
+    // Best-effort cache write — if two participants race on the same
+    // first request, the unique constraint just makes the second insert a
+    // harmless no-op via upsert.
+    await supabaseAdmin.from("question_translations").upsert(
+      {
+        session_id: session.id,
+        question_index: index,
+        language_code: language,
+        question_text: translated.question_text,
+        option_a: translated.option_a,
+        option_b: translated.option_b,
+        option_c: translated.option_c,
+        option_d: translated.option_d
+      },
+      { onConflict: "session_id,question_index,language_code" }
+    );
+    return { ...base, question_text: translated.question_text, option_a: translated.option_a, option_b: translated.option_b, option_c: translated.option_c, option_d: translated.option_d };
+  } catch (err) {
+    console.error("Translation error, falling back to English:", err);
+    return base;
+  }
 }
 
 // GET /api/sessions/:id/state?participantId=...
@@ -120,10 +178,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .eq("session_id", params.id)
     .eq("question_index", participant.current_question_index);
 
+  const question = await toLocalizedQuestion(session, participant.current_question_index, participant.language ?? "en");
+
   return NextResponse.json({
     status: "live",
     phase: "question",
-    question: toPublicQuestion(session, participant.current_question_index),
+    question,
     questionNumber: participant.current_question_index + 1,
     totalQuestions,
     questionStartedAt: participant.current_question_started_at,

@@ -78,6 +78,8 @@ export interface Participant {
   id: string;
   session_id: string;
   name: string;
+  avatar: string;
+  language: string;
   joined_at: string;
   current_question_index: number;
   current_question_started_at: string | null;

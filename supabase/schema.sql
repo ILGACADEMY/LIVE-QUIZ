@@ -76,12 +76,14 @@ create table if not exists participants (
   id                          uuid primary key default gen_random_uuid(),
   session_id                  uuid not null references sessions(id) on delete cascade,
   name                        text not null,
+  avatar                      text not null default '🦉',
+  language                    text not null default 'en',
   joined_at                   timestamptz not null default now(),
   current_question_index      int not null default 0,
   current_question_started_at timestamptz,
   base_score                  int not null default 0,
-  speed_score                 int not null default 0,
-  total_score                 int not null default 0,
+  speed_score                 numeric(6,1) not null default 0,
+  total_score                 numeric(6,1) not null default 0,
   completed_at                timestamptz,
   last_submission_at          timestamptz
 );
@@ -94,8 +96,8 @@ create table if not exists answers (
   selected_option   text not null check (selected_option in ('A', 'B', 'C', 'D')),
   is_correct        boolean not null,
   base_score        int not null,
-  speed_bonus       int not null,
-  question_score    int not null,
+  speed_bonus       numeric(6,1) not null,
+  question_score    numeric(6,1) not null,
   elapsed_ms        int not null,
   answered_at       timestamptz not null default now(),
   unique (session_id, participant_id, question_index) -- prevents double submission (spec §12, §43)
@@ -107,6 +109,29 @@ create index if not exists idx_participants_session on participants(session_id);
 create index if not exists idx_answers_session on answers(session_id);
 create index if not exists idx_answers_participant on answers(participant_id);
 create index if not exists idx_sessions_delete_at on sessions(delete_at);
+
+-- ---------------------------------------------------------------------------
+-- Translation cache. Participants can view questions in their own phone's
+-- language while the presenter/admin screens stay in English. Each
+-- question is translated by AI once per (session, question, language) and
+-- reused for every participant who picks that language — not re-translated
+-- per person, which matters at ~300 concurrent participants.
+-- ---------------------------------------------------------------------------
+create table if not exists question_translations (
+  id                uuid primary key default gen_random_uuid(),
+  session_id        uuid not null references sessions(id) on delete cascade,
+  question_index    int not null,
+  language_code     text not null,
+  question_text     text not null,
+  option_a          text not null,
+  option_b          text not null,
+  option_c          text not null,
+  option_d          text not null,
+  created_at        timestamptz not null default now(),
+  unique (session_id, question_index, language_code)
+);
+
+alter table question_translations enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security

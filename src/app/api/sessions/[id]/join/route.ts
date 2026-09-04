@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { broadcastSessionEvent } from "@/lib/realtime";
+import { randomAvatar, randomGuestName } from "@/lib/avatars";
+import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 
-// POST /api/sessions/:id/join — { name }. No account, no email, no password
-// (spec §20-21). Returns a participant id the browser stores (e.g. in
-// sessionStorage) to authenticate subsequent /answer and /state calls.
+// POST /api/sessions/:id/join — { name?, language? }. Name is optional —
+// leave it blank and we assign a fun guest name + cartoon avatar instead.
+// No account, no email, no password. Returns a participant id the browser
+// stores (e.g. in sessionStorage) to authenticate subsequent calls.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const { name } = await req.json();
+  const { name, language } = await req.json();
   const trimmed = typeof name === "string" ? name.trim() : "";
 
-  if (!trimmed) {
-    return NextResponse.json({ error: "Please enter your name." }, { status: 400 });
-  }
   if (trimmed.length > 60) {
     return NextResponse.json({ error: "Name is too long." }, { status: 400 });
   }
+
+  const languageCode = SUPPORTED_LANGUAGES.some((l) => l.code === language) ? language : "en";
+  const finalName = trimmed || randomGuestName();
+  const avatar = randomAvatar();
 
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("sessions")
@@ -30,7 +34,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: participant, error } = await supabaseAdmin
     .from("participants")
-    .insert({ session_id: params.id, name: trimmed })
+    .insert({ session_id: params.id, name: finalName, avatar, language: languageCode })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

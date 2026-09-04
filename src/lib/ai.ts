@@ -120,3 +120,51 @@ function safeParseJson<T>(text: string, fallback: T): T {
     return fallback;
   }
 }
+
+/**
+ * Translates one question + its four options into the target language.
+ * Called once per (session, question, language) and cached — see
+ * `question_translations` in supabase/schema.sql — never once per
+ * participant, so a 300-person session doesn't fan out into hundreds of
+ * AI calls for the same question.
+ */
+export async function translateQuestion(params: {
+  languageName: string;
+  questionText: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+}): Promise<{ question_text: string; option_a: string; option_b: string; option_c: string; option_d: string }> {
+  const fallback = {
+    question_text: params.questionText,
+    option_a: params.optionA,
+    option_b: params.optionB,
+    option_c: params.optionC,
+    option_d: params.optionD
+  };
+
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    system:
+      `Translate the given watch-retail training quiz question and its four answer options into ${params.languageName}. ` +
+      "Keep technical horology terms accurate and natural for a retail sales context. Return ONLY valid JSON, no preamble, " +
+      'no markdown fences, matching exactly: {"question_text": string, "option_a": string, "option_b": string, "option_c": string, "option_d": string}.',
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify({
+          question_text: params.questionText,
+          option_a: params.optionA,
+          option_b: params.optionB,
+          option_c: params.optionC,
+          option_d: params.optionD
+        })
+      }
+    ]
+  });
+
+  return safeParseJson(extractText(msg), fallback);
+}
+

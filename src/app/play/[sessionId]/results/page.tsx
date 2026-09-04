@@ -123,7 +123,13 @@ export default function ResultsPage({
     <main className="min-h-screen px-6 py-10 flex flex-col items-center">
       <div className="w-full max-w-lg">
         <p className="text-gold text-xs tracking-[0.2em] mb-3 text-center">{data.quizTitle.toUpperCase()}</p>
-        <p className="font-display italic text-2xl text-center mb-8">Nice work, {data.name}</p>
+        <p className="font-display italic text-2xl text-center mb-4">Nice work, {data.name}</p>
+
+        <div className="flex justify-center mb-8 no-print">
+          <button onClick={() => window.print()} className="btn-ghost text-sm px-5 py-2.5">
+            Download my results (PDF)
+          </button>
+        </div>
 
         <div className="case-panel p-8 text-center mb-6">
           <p className="font-dial text-5xl text-gold mb-2">{data.totalScore}</p>
