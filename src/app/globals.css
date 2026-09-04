@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-hairline;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 1200px 800px at 50% -10%, rgba(201, 162, 75, 0.08), transparent),
+      #12100d;
+  }
+  ::selection {
+    background: #c9a24b;
+    color: #12100d;
+  }
+  :focus-visible {
+    outline: 2px solid #c9a24b;
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* A crisp, faceted panel — like a case back, not a soft SaaS card. */
+  .case-panel {
+    @apply bg-graphite border border-hairline;
+  }
+
+  .btn-gold {
+    @apply bg-gold text-charcoal font-body font-semibold px-6 py-3 tracking-wide
+           transition-colors hover:bg-[#dbb765] active:bg-[#b8913f]
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .btn-ghost {
+    @apply border border-hairline text-ivory font-body font-medium px-6 py-3
+           transition-colors hover:border-gold hover:text-gold
+           disabled:opacity-40 disabled:pointer-events-none;
+  }
+
+  .field-label {
+    @apply text-parchment/70 text-xs font-body font-medium tracking-wide;
+  }
+
+  .field-input {
+    @apply w-full bg-charcoal border border-hairline text-ivory font-body px-4 py-3
+           placeholder:text-parchment/30 focus:border-gold transition-colors;
+  }
+}
