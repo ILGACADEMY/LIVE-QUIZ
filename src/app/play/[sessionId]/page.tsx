@@ -53,7 +53,6 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const [selected, setSelected] = useState<OptionKey | null>(null);
   const [dialSeconds, setDialSeconds] = useState(0);
   const [answeredSoFar, setAnsweredSoFar] = useState(0);
-  const [joinedCount, setJoinedCount] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const startsAtRef = useRef<number | null>(null);
 
@@ -95,16 +94,6 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     }
   }, [participantId, params.sessionId]);
 
-  // One-time fetch for the initial join count (the participant-scoped
-  // state endpoint doesn't include it — only the admin/no-participantId
-  // shape does — so this is a single separate call, not part of polling).
-  useEffect(() => {
-    fetch(`/api/sessions/${params.sessionId}/state`)
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => setJoinedCount(data.counts?.joined ?? null))
-      .catch(() => {});
-  }, [params.sessionId]);
-
   // Load participant identity from the join step.
   useEffect(() => {
     const raw = sessionStorage.getItem(`ilg-quiz-${params.sessionId}`);
@@ -138,8 +127,10 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       .on("broadcast", { event: "question_advanced" }, () => fetchState())
       .on("broadcast", { event: "answer_count" }, (msg) => {
         const payload = msg.payload as { questionIndex?: number; answered?: number; type?: string; joined?: number };
-        if (payload.type === "joined" && typeof payload.joined === "number") {
-          setJoinedCount(payload.joined);
+        if (payload.type === "joined") {
+          // Join-count broadcasts are for the presenter's dashboard and QR
+          // panel only — participants don't need to see this, so it's
+          // intentionally ignored here.
           return;
         }
         const currentIndex = q?.question.index ?? reveal?.question.index;
@@ -215,12 +206,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         <p className="text-gold text-xs tracking-[0.2em] mb-4">YOU&rsquo;RE IN</p>
         <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
-        <p className="text-parchment/50 mb-3">Waiting for the instructor to start…</p>
-        {joinedCount !== null && (
-          <p className="text-gold/70 text-xs font-dial tracking-wide">
-            {joinedCount} {joinedCount === 1 ? "person has" : "people have"} joined
-          </p>
-        )}
+        <p className="text-parchment/50">Waiting for the instructor to start…</p>
       </main>
     );
   }

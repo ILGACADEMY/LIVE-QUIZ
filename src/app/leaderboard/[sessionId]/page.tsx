@@ -17,7 +17,8 @@ const MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function LeaderboardPage({ params }: { params: { sessionId: string } }) {
   const [top10, setTop10] = useState<Row[]>([]);
-  const [totalCompleted, setTotalCompleted] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [totalJoined, setTotalJoined] = useState(0);
   const [stores, setStores] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [storeFilter, setStoreFilter] = useState("");
@@ -32,7 +33,8 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
     if (res.ok) {
       const data = await res.json();
       setTop10(data.top10);
-      setTotalCompleted(data.totalCompleted);
+      setCompletedCount(data.completedCount);
+      setTotalJoined(data.totalJoined);
       setStores(data.filters?.stores ?? []);
       setCities(data.filters?.cities ?? []);
     }
@@ -64,7 +66,9 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
     <main className="min-h-screen px-10 py-14 flex flex-col items-center">
       <MeridianWordmark size="small" />
       <h1 className="font-display italic text-5xl mt-6 mb-2">Leaderboard</h1>
-      <p className="text-parchment/40 text-sm mb-8">{totalCompleted} finished so far</p>
+      <p className="text-parchment/40 text-sm mb-8">
+        Live standings — {totalJoined} joined, {completedCount} finished
+      </p>
 
       <div className="w-full max-w-3xl flex flex-wrap gap-3 justify-center mb-10">
         <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="field-input max-w-[220px]">
@@ -106,7 +110,7 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
       <div className="w-full max-w-3xl flex flex-col gap-3">
         {visibleTop10.length === 0 && (
           <p className="text-center text-parchment/40 py-20">
-            {top10.length === 0 ? "Waiting for the first finishers…" : "No one matching that search is in the current Top 10."}
+            {top10.length === 0 ? "Waiting for the first participant to join…" : "No one matching that search is in the current Top 10."}
           </p>
         )}
         {visibleTop10.map((row) => (

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SUPPORTED_LANGUAGES, detectSupportedLanguage } from "@/lib/languages";
 import { AVATARS, randomAvatar } from "@/lib/avatars";
-import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
 export default function JoinPage({ params }: { params: { sessionId: string } }) {
@@ -20,7 +19,6 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
   const [loading, setLoading] = useState(false);
   const [quizTitle, setQuizTitle] = useState<string | null>(null);
   const [translationEnabled, setTranslationEnabled] = useState(false);
-  const [joinedCount, setJoinedCount] = useState<number | null>(null);
 
   useEffect(() => {
     setAvatar(randomAvatar());
@@ -30,26 +28,8 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
       .then((data) => {
         setQuizTitle(data.quizTitle);
         setTranslationEnabled(Boolean(data.translationEnabled));
-        setJoinedCount(data.counts?.joined ?? 0);
       })
       .catch(() => setError("This quiz session was not found or has ended."));
-  }, [params.sessionId]);
-
-  // Live join count — updates the moment anyone (including you, once you
-  // submit) joins, via the same broadcast the join API route sends.
-  useEffect(() => {
-    const channel = supabaseBrowser
-      .channel(`session:${params.sessionId}`)
-      .on("broadcast", { event: "answer_count" }, (msg) => {
-        const payload = msg.payload as { type?: string; joined?: number };
-        if (payload.type === "joined" && typeof payload.joined === "number") {
-          setJoinedCount(payload.joined);
-        }
-      })
-      .subscribe();
-    return () => {
-      supabaseBrowser.removeChannel(channel);
-    };
   }, [params.sessionId]);
 
   async function handleJoin(e: React.FormEvent) {
@@ -111,11 +91,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
         <div className="w-10 h-px bg-gold/50 mx-auto my-6" />
         {quizTitle && <p className="text-parchment/60 text-sm mb-2">{quizTitle}</p>}
         {!quizTitle && !error && <p className="text-parchment/40 text-sm mb-2">Loading session…</p>}
-        {joinedCount !== null && (
-          <p className="text-gold/70 text-xs font-dial tracking-wide mb-8">
-            {joinedCount} {joinedCount === 1 ? "person has" : "people have"} joined
-          </p>
-        )}
+        <div className="mb-8" />
 
         <form onSubmit={handleJoin} className="case-panel p-8 text-left">
           <div className="flex flex-col items-center mb-6">
@@ -153,7 +129,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
             className="field-input mb-1"
             placeholder="e.g. +971 50 123 4567"
           />
-          <p className="text-parchment/30 text-xs mb-5">Required — this is what stops the same person joining twice.</p>
+          <p className="text-parchment/30 text-xs mb-5">Required.</p>
 
           <label className="field-label block mb-2">Email (optional)</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="field-input mb-1" placeholder="you@example.com" />

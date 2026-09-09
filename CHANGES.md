@@ -195,6 +195,37 @@ Files: `src/app/api/upload/sign/route.ts` (new),
 `src/app/api/upload/route.ts` (removed),
 `src/components/admin/QuestionEditor.tsx`.
 
+## 9. Leaderboard now shows live standings, not just final results
+
+Real bug: the leaderboard only included participants once `completed_at`
+was set, but in the presenter-controlled model, that only happens for
+**everyone at once**, at the very last question. Clicking "Show
+leaderboard" at any earlier point always showed "0 finished so far" and
+an empty list, no matter how far into the quiz you were.
+
+**Fixed:** the leaderboard now ranks every joined participant by their
+current `total_score` at all times — scores are already locked in
+server-side per question, so this is correct whether it's checked after
+question 1, after question 5, or after the quiz ends (it just naturally
+becomes the final result once nobody's score can change anymore). A
+separate `completedCount` is still tracked and shown alongside it for
+context ("X joined, Y finished"), but no longer gates who appears in the
+ranking.
+
+Files: `src/app/api/sessions/[id]/leaderboard/route.ts`,
+`src/app/leaderboard/[sessionId]/page.tsx`.
+
+## 10. Join count removed from participant-facing screens
+
+The live "X people have joined" count was originally added to the join
+form and the post-join waiting room too, alongside the presenter's
+dashboard. Clarified: this is a presenter-only tool for judging when to
+start — participants don't need or want to see it. Removed from both
+participant screens; unchanged on the presenter's dashboard and QR panel,
+where it's still live and prominent.
+
+Files: `src/app/join/[sessionId]/page.tsx`, `src/app/play/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
