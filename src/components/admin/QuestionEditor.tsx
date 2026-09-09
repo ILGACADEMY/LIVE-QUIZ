@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { OptionKey, Difficulty } from "@/lib/types";
+import { supabaseBrowser } from "@/lib/supabase/client";
 
 export interface EditableQuestion {
   id?: string;
@@ -78,26 +79,48 @@ export default function QuestionEditor({
     onChange({ ...question, [key]: value });
   }
 
+  const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+  const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+
   async function handleUpload(file: File) {
     setUploading(true);
     setUploadError(null);
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: form });
-      const data = await res.json();
-
-      if (!res.ok) {
-        // This is the fix: previously a failed upload just silently reset
-        // the button with no explanation at all. Now you'll actually see
-        // why — expired admin session, unsupported file type, or file
-        // too large are the three causes the route can report.
-        setUploadError(data.error ?? "Upload failed for an unknown reason.");
+      const isVideo = file.type.startsWith("video/");
+      const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+      if (file.size > maxBytes) {
+        setUploadError(`${isVideo ? "Video" : "Image"} must be under ${maxBytes / (1024 * 1024)}MB.`);
         return;
       }
 
-      set("image_url", data.url);
-      set("media_type", data.mediaType ?? "image");
+      // Step 1: ask our server for a one-time signed upload token (a tiny
+      // JSON request — no file bytes involved, so this part never hits
+      // any body-size limit).
+      const signRes = await fetch("/api/upload/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, fileType: file.type })
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok) {
+        setUploadError(signData.error ?? "Could not prepare the upload.");
+        return;
+      }
+
+      // Step 2: send the actual file bytes DIRECTLY to Supabase Storage
+      // using that token — this never passes through our own server, so
+      // Vercel's ~4.5MB serverless request-body limit never applies here,
+      // no matter how large the video is (up to our own 50MB check above).
+      const { error: storageError } = await supabaseBrowser.storage
+        .from("quiz-images")
+        .uploadToSignedUrl(signData.path, signData.token, file);
+      if (storageError) {
+        setUploadError(`Upload failed: ${storageError.message}`);
+        return;
+      }
+
+      set("image_url", signData.publicUrl);
+      set("media_type", signData.mediaType ?? (isVideo ? "video" : "image"));
     } catch {
       setUploadError("Network error — the upload never reached the server. Check your connection and try again.");
     } finally {

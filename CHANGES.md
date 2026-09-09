@@ -167,6 +167,30 @@ Files: `src/components/admin/QuizEditor.tsx`,
 `src/app/join/[sessionId]/page.tsx`, `supabase/schema.sql`,
 `supabase/upgrade_existing_database.sql`.
 
+## 8. Fixed uploads failing on larger files (the real cause of "network error, never reached the server")
+
+The earlier upload fix (item 1 above) routed the file through `/api/upload`
+on our own server. That works for small images but silently fails for
+anything near or above **~4.5MB** — that's Vercel's hard Serverless
+Function request-body limit, enforced by the platform itself before any
+of our code runs. A request cut off by that limit looks, from the
+browser's side, exactly like a network error — because the connection
+genuinely never completed. This is almost certainly what was happening
+for videos (up to 50MB) and larger photos.
+
+**The fix:** the browser now uploads file bytes **directly to Supabase
+Storage**, never through our own server at all.
+`POST /api/upload/sign` returns a short-lived signed upload token (a tiny
+JSON exchange, no file bytes — never hits any size limit), and the actual
+upload goes straight from the browser to Supabase Storage using that
+token. The old `/api/upload/route.ts` (the proxy-through-server approach)
+has been removed entirely rather than left as a second, still-broken path.
+
+Files: `src/app/api/upload/sign/route.ts` (new),
+`src/app/api/upload/route.ts` (removed),
+`src/components/admin/QuestionEditor.tsx`.
+
+## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
 app's Supabase project running):** run `supabase/upgrade_existing_database.sql`

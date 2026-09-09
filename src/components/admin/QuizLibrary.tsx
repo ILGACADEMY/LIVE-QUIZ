@@ -26,11 +26,23 @@ export default function QuizLibrary() {
 
   async function createQuiz() {
     setBusyId("new");
-    const res = await fetch("/api/quizzes", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-    setBusyId(null);
-    if (res.ok) {
-      const { quiz } = await res.json();
-      router.push(`/admin/quizzes/${quiz.id}/edit`);
+    setError(null);
+    try {
+      const res = await fetch("/api/quizzes", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        // Previously this failed with no visible message at all — the
+        // most common cause is the database missing a column the code
+        // expects (e.g. a migration that hasn't been run yet), and
+        // Supabase's own error message says exactly which one.
+        setError(data.error ?? "Could not create a new quiz.");
+        return;
+      }
+      router.push(`/admin/quizzes/${data.quiz.id}/edit`);
+    } catch {
+      setError("Network error — the request never reached the server.");
+    } finally {
+      setBusyId(null);
     }
   }
 
