@@ -77,6 +77,7 @@ export interface LiveSession {
   current_question_started_at: string | null; // NEW
   phase: SessionPhase; // NEW
   phase_deadline: string | null; // NEW — when the current question auto-reveals
+  short_code: string | null; // NEW — short numeric code, QR-scan fallback
   created_at: string;
   started_at: string | null;
   ended_at: string | null;

@@ -79,11 +79,18 @@ create table if not exists sessions (
   phase                         text not null default 'waiting'
                                   check (phase in ('waiting', 'question', 'revealed', 'finished')),
   phase_deadline                timestamptz,
+  -- A short, easy-to-type fallback for joining when scanning the QR code
+  -- doesn't work (camera permission blocked, some MDM-locked work
+  -- phones, etc.) or when someone would rather just type a code than
+  -- deal with a long URL. Unique only among currently-active (non-
+  -- finished) sessions — old codes free up once a session ends.
+  short_code                    text,
   created_at                    timestamptz not null default now(),
   started_at                    timestamptz,
   ended_at                      timestamptz,
   delete_at                     timestamptz not null default (now() + interval '24 hours')
 );
+create unique index if not exists idx_sessions_short_code_active on sessions(short_code) where status != 'finished';
 
 create table if not exists participants (
   id                          uuid primary key default gen_random_uuid(),

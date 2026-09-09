@@ -427,6 +427,97 @@ inputs), and a small on-screen tip makes it discoverable.
 
 Files: `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 19. Bigger QR, a short-code fallback, richer AI learning profiles, a real fix for the submission race, and last-question button clarity
+
+Five things, all from the same round of feedback:
+
+- **QR code made much bigger** (200px → 340px inline, 520px in a new
+  full-screen mode) for visibility across a room. A "Show QR full screen"
+  button puts up a dedicated, even larger view with nothing else on
+  screen.
+- **New short-code fallback for joining.** Every session now gets a
+  6-digit code (`sessions.short_code`, unique among currently-active
+  sessions) shown right alongside the QR. A new generic `/join` page lets
+  someone type that code instead of scanning — this is the real answer
+  to "what if the QR won't scan" (camera permission blocked, some
+  locked-down work phones) and "the link is long to type": the code is
+  short, and `/join` itself is a short URL too.
+- **AI learning profiles now include specific learning topics to focus
+  on, not just broad categories.** Previously the participant-facing AI
+  profile only knew about category-level performance. It now also
+  receives a breakdown by each question's specific `learning_topic` and
+  returns a `focusTopics` list naming precise things to revise (e.g.
+  "Chronograph tachymeter function") rather than only a category name
+  like "Movements" — shown as its own "Concentrate on these topics next"
+  section on the results page.
+- **A real second fix for the answer-submission race.** The earlier fix
+  (checking a submission-in-flight flag before starting a background
+  refresh) missed one case: a refresh that was *already* in flight when
+  the answer was tapped would pass that check and still land afterward
+  with stale data. Added a second check right after the network response
+  comes back, which closes that gap.
+- **Last-question button now says "End quiz" instead of "Next question."**
+  No functional change — clicking it already finished the quiz correctly
+  before — just a label fix so it doesn't imply a next question exists
+  when it doesn't.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`,
+`src/app/join/page.tsx` (new), `src/app/api/sessions/by-code/[code]/route.ts`
+(new), `src/app/api/sessions/route.ts`, `src/lib/ai.ts`,
+`src/app/api/sessions/[id]/results/route.ts`,
+`src/app/api/ai/analysis/route.ts`, `src/app/play/[sessionId]/results/page.tsx`,
+`src/app/play/[sessionId]/page.tsx`, `src/lib/types.ts`, `supabase/schema.sql`,
+`supabase/upgrade_existing_database.sql`.
+
+## 20. Trainer role — run quizzes without being able to edit them
+
+A real second login, not just a hidden button. Set a new `TRAINER_PASSWORD`
+environment variable (alongside your existing `ADMIN_PASSWORD`) and hand
+that password to anyone who needs to launch and run sessions in a
+different region without being able to touch quiz content.
+
+- **Same login screen, same password field** — whichever password is
+  entered determines the role automatically (`ADMIN_PASSWORD` → full
+  admin, `TRAINER_PASSWORD` → trainer). No separate trainer login flow to
+  maintain.
+- **A trainer can:** view the quiz list, launch a session, fully control
+  it live (start, reveal, next, end), view the leaderboard, download the
+  CSV exports, and generate the AI group analysis — everything involved
+  in actually running a quiz.
+- **A trainer cannot:** create, edit, duplicate, or delete a quiz
+  template, upload question images/videos, or change the site logo.
+  These aren't just hidden buttons — every one of those API routes
+  independently rejects a trainer's request even if they somehow reached
+  the URL directly.
+- The login cookie now stores only the **role name** ("admin" or
+  "trainer"), never the password itself — a small security improvement
+  over the previous version, which stored the raw password in the cookie.
+
+Files: `src/lib/admin-auth.ts`, `src/lib/require-admin.ts`,
+`src/app/api/admin/login/route.ts`, `src/app/admin/page.tsx`,
+`src/app/admin/quizzes/[id]/preview/page.tsx`,
+`src/app/admin/session/[sessionId]/page.tsx`,
+`src/components/admin/QuizLibrary.tsx`, and the auth check in every
+session-control API route (`sessions`, `start`, `advance`, `end`,
+`delete`, `leaderboard`, `export`, `ai/analysis`) — all switched from
+admin-only to admin-or-trainer, while `quizzes` (create/edit/delete),
+`quizzes/duplicate`, `upload/sign`, and `admin/branding` remain strictly
+admin-only.
+
+## 21. Last question finishes automatically — no extra click needed
+
+Once the very last question is revealed (by any means — presenter click,
+timer, or everyone answering), the quiz now finishes on its own within
+about a second, instead of requiring a further "Next question"/"End quiz"
+click. The button area shows a plain, disabled "Ending automatically…"
+label during that instant rather than a clickable action, since there's
+nothing left to press. Every other question is completely unaffected —
+this only shortcuts the very last one, and the reveal step itself (answer,
+distribution, explanation) still shows exactly as normal first.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

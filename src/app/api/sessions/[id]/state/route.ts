@@ -93,6 +93,38 @@ async function toLocalizedQuestion(session: LiveSession, index: number, language
  * no cron needed. Returns the (possibly-updated) session.
  */
 async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
+  const totalQuestions = session.quiz_snapshot.questions.length;
+  const isLastQuestion = session.current_question_index + 1 >= totalQuestions;
+
+  // On the LAST question specifically, once it's revealed there's nothing
+  // left to advance to — so the quiz finishes automatically rather than
+  // waiting for a presenter to click a "Next question" that would just
+  // end it anyway. Every other question still waits for that manual
+  // click, same as before; this only shortcuts the very last one.
+  if (session.phase === "revealed" && isLastQuestion) {
+    const endedAt = new Date();
+    const deleteAt = new Date(endedAt.getTime() + 24 * 60 * 60 * 1000);
+
+    const { data: updated } = await supabaseAdmin
+      .from("sessions")
+      .update({ status: "finished", phase: "finished", ended_at: endedAt.toISOString(), delete_at: deleteAt.toISOString(), phase_deadline: null })
+      .eq("id", session.id)
+      .eq("phase", "revealed") // guards against racing with a presenter's manual click
+      .select()
+      .single<LiveSession>();
+
+    if (updated) {
+      await supabaseAdmin
+        .from("participants")
+        .update({ completed_at: endedAt.toISOString() })
+        .eq("session_id", session.id)
+        .is("completed_at", null);
+      await broadcastSessionEvent(session.id, "quiz_ended", { deleted: false });
+      return updated;
+    }
+    return session;
+  }
+
   if (session.phase !== "question") return session;
 
   const deadlinePassed = session.phase_deadline ? new Date(session.phase_deadline).getTime() <= Date.now() : false;
@@ -218,6 +250,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       status: session.status,
       phase: session.phase,
       quizTitle: session.quiz_snapshot.quiz.title,
+      shortCode: session.short_code,
       translationEnabled: session.quiz_snapshot.quiz.translation_enabled,
       questionNumber: session.current_question_index + 1,
       totalQuestions,

@@ -65,6 +65,11 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     const res = await fetch(`/api/sessions/${params.sessionId}/state?participantId=${participantId}`);
     if (!res.ok) return;
     const data = await res.json();
+    // Second check, after the network round trip: a poll that was
+    // already in flight when the user tapped an answer (started before
+    // submittingRef was set) would pass the earlier check but still
+    // resolve with stale data afterward — this catches that case too.
+    if (submittingRef.current) return;
 
     if (data.phase === "ended") {
       setPhase("ended");

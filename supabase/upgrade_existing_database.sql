@@ -40,3 +40,7 @@ create table if not exists app_settings (
 insert into app_settings (id)
 select gen_random_uuid()
 where not exists (select 1 from app_settings);
+
+-- ============ short join code (QR alternative) ============
+alter table sessions add column if not exists short_code text;
+create unique index if not exists idx_sessions_short_code_active on sessions(short_code) where status != 'finished';

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
 
 // GET /api/sessions/:id/leaderboard[?participantId=...][?admin=1][?view=top10|byCity|byStore]
 //
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   if (wantsAdmin) {
-    if (!isAdminRequestAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isSessionControllerRequestAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     return NextResponse.json({
       leaderboard: ranked.map((r) => ({
         rank: r.rank,

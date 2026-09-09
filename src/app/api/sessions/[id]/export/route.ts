@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
 import { LiveSession } from "@/lib/types";
 
 const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d" } as const;
@@ -35,7 +35,7 @@ function csvResponse(csv: string, filename: string) {
 // completely normal situations. Every participant who joined is included
 // now, exactly like the on-screen "Full ranking" table.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminRequestAuthorized(req)) {
+  if (!isSessionControllerRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

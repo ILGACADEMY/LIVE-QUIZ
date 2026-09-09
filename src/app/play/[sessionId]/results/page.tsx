@@ -27,11 +27,13 @@ interface ResultsData {
   aiFeedbackEnabled: boolean;
   breakdown: Breakdown[];
   categoryBreakdown: { category: string; correct: number; total: number }[];
+  topicBreakdown: { topic: string; correct: number; total: number }[];
 }
 
 interface Profile {
   strong: string[];
   improve: string[];
+  focusTopics: string[];
   recommendation: string;
 }
 
@@ -185,15 +187,25 @@ export default function ResultsPage({
             <p className="field-label mb-4">Your learning profile</p>
             {profile.strong.length > 0 && (
               <p className="text-sm mb-2">
-                <span className="text-gold">Strong: </span>
+                <span className="text-gold">Strong categories: </span>
                 {profile.strong.join(", ")}
               </p>
             )}
             {profile.improve.length > 0 && (
               <p className="text-sm mb-3">
-                <span className="text-crimson/80">Improve: </span>
+                <span className="text-crimson/80">Categories to improve: </span>
                 {profile.improve.join(", ")}
               </p>
+            )}
+            {profile.focusTopics && profile.focusTopics.length > 0 && (
+              <div className="mb-3">
+                <p className="text-sm text-gold mb-1">Concentrate on these topics next:</p>
+                <ul className="list-disc list-inside text-sm text-parchment/70">
+                  {profile.focusTopics.map((topic) => (
+                    <li key={topic}>{topic}</li>
+                  ))}
+                </ul>
+              </div>
             )}
             {profile.recommendation && <p className="text-sm text-parchment/60">{profile.recommendation}</p>}
           </div>

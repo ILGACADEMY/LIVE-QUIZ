@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
 import { Quiz, Question } from "@/lib/types";
 
 // POST /api/sessions — "LAUNCH LIVE SESSION" (spec §20)
 export async function POST(req: NextRequest) {
-  if (!isAdminRequestAuthorized(req)) {
+  if (!isSessionControllerRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -34,9 +34,27 @@ export async function POST(req: NextRequest) {
   // never affect this running session (spec §39).
   const quiz_snapshot = { quiz, questions };
 
+  // Short numeric join code — the fallback for when scanning the QR
+  // doesn't work (camera permission blocked, some locked-down work
+  // phones) or someone would rather type a code than a long URL. Unique
+  // only among currently-active sessions (the partial index allows the
+  // same code to be reused once an old session finishes), so a handful
+  // of retries on a collision is always enough in practice.
+  let shortCode: string | null = null;
+  for (let attempt = 0; attempt < 5 && !shortCode; attempt++) {
+    const candidate = String(Math.floor(100000 + Math.random() * 900000)); // 6 digits
+    const { data: existing } = await supabaseAdmin
+      .from("sessions")
+      .select("id")
+      .eq("short_code", candidate)
+      .neq("status", "finished")
+      .maybeSingle();
+    if (!existing) shortCode = candidate;
+  }
+
   const { data: session, error } = await supabaseAdmin
     .from("sessions")
-    .insert({ quiz_id, quiz_snapshot, status: "waiting" })
+    .insert({ quiz_id, quiz_snapshot, status: "waiting", short_code: shortCode })
     .select()
     .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

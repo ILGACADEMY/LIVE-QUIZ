@@ -47,24 +47,32 @@ export async function generateWrongAnswerFeedback(params: {
 export async function generateLearningProfile(params: {
   quizTitle: string;
   categoryBreakdown: { category: string; correct: number; total: number }[];
-}): Promise<{ strong: string[]; improve: string[]; recommendation: string }> {
+  topicBreakdown: { topic: string; correct: number; total: number }[];
+}): Promise<{ strong: string[]; improve: string[]; focusTopics: string[]; recommendation: string }> {
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 300,
+    max_tokens: 400,
     system:
-      "You analyze a luxury watch retail trainee's quiz category performance and return ONLY valid JSON, " +
-      'no preamble, no markdown fences, matching exactly: {"strong": string[], "improve": string[], "recommendation": string}. ' +
-      "strong/improve list category names (max 4 each), recommendation is one sentence naming what to revise next.",
+      "You analyze a luxury watch retail trainee's quiz performance, broken down both by broad category and by " +
+      "specific learning topic, and return ONLY valid JSON, no preamble, no markdown fences, matching exactly: " +
+      '{"strong": string[], "improve": string[], "focusTopics": string[], "recommendation": string}. ' +
+      "strong/improve list broad CATEGORY names (max 4 each) based on the category results. focusTopics lists the " +
+      "specific LEARNING TOPICS (max 5) where this trainee should concentrate their revision next, chosen from the " +
+      "topic results — prioritize topics with low accuracy, and be specific (e.g. 'Chronograph tachymeter function' " +
+      "rather than just repeating a category name). recommendation is one sentence tying it together: what to " +
+      "revise next and why.",
     messages: [
       {
         role: "user",
-        content: `Quiz: ${params.quizTitle}\nCategory results:\n${params.categoryBreakdown
+        content: `Quiz: ${params.quizTitle}\n\nCategory results:\n${params.categoryBreakdown
           .map((c) => `- ${c.category}: ${c.correct}/${c.total} correct`)
+          .join("\n")}\n\nLearning topic results:\n${params.topicBreakdown
+          .map((t) => `- ${t.topic}: ${t.correct}/${t.total} correct`)
           .join("\n")}`
       }
     ]
   });
-  return safeParseJson(extractText(msg), { strong: [], improve: [], recommendation: "" });
+  return safeParseJson(extractText(msg), { strong: [], improve: [], focusTopics: [], recommendation: "" });
 }
 
 /** Admin-facing aggregate analysis across all participants (spec §33-34). */

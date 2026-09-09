@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
 import { generateLearningProfile, generateQuizPerformanceAnalysis } from "@/lib/ai";
 import { LiveSession } from "@/lib/types";
 
@@ -20,7 +20,8 @@ export async function POST(req: NextRequest) {
     try {
       const profile = await generateLearningProfile({
         quizTitle: results.quizTitle,
-        categoryBreakdown: results.categoryBreakdown
+        categoryBreakdown: results.categoryBreakdown,
+        topicBreakdown: results.topicBreakdown
       });
       return NextResponse.json({ profile });
     } catch (err) {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (body.type === "admin") {
-    if (!isAdminRequestAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!isSessionControllerRequestAuthorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { sessionId } = body;
 
     const { data: session } = await supabaseAdmin

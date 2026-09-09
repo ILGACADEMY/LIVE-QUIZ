@@ -77,6 +77,21 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }, {})
   );
 
+  // Same shape, grouped by the question's specific learning_topic instead
+  // of its broader category — this is what lets the AI profile name a
+  // precise thing to revise ("Chronograph tachymeter function") rather
+  // than only a broad category ("Movements").
+  const topicBreakdown = Object.values(
+    answers.reduce<Record<string, { topic: string; correct: number; total: number }>>((acc, a) => {
+      const q = session.quiz_snapshot.questions[a.question_index];
+      const key = q.learning_topic || q.category || "General";
+      acc[key] = acc[key] || { topic: key, correct: 0, total: 0 };
+      acc[key].total += 1;
+      if (a.is_correct) acc[key].correct += 1;
+      return acc;
+    }, {})
+  );
+
   return NextResponse.json({
     quizTitle: quiz.title,
     name: participant.name,
@@ -88,6 +103,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     timeSeconds,
     aiFeedbackEnabled: quiz.ai_feedback_enabled,
     breakdown,
-    categoryBreakdown
+    categoryBreakdown,
+    topicBreakdown
   });
 }

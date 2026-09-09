@@ -33,6 +33,7 @@ interface StateResponse {
   status: "waiting" | "live" | "finished";
   phase: "waiting" | "question" | "revealed" | "finished";
   quizTitle: string;
+  shortCode: string | null;
   questionNumber: number;
   totalQuestions: number;
   startedAt: string | null;
@@ -46,6 +47,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [state, setState] = useState<StateResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
+  const [qrFullscreen, setQrFullscreen] = useState(false);
   const [fullLeaderboard, setFullLeaderboard] = useState<AdminLeaderboardRow[] | null>(null);
   const [filterOptions, setFilterOptions] = useState<{ stores: string[]; cities: string[] }>({ stores: [], cities: [] });
   const [nameSearch, setNameSearch] = useState("");
@@ -213,9 +215,18 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                 Start quiz
               </button>
             )}
-            {state.status === "live" && (
+            {state.status === "live" && !(state.phase === "revealed" && state.questionNumber >= state.totalQuestions) && (
               <button onClick={advance} disabled={busy} className="btn-gold" title="Works with a presentation clicker's next-slide button too">
-                {state.phase === "question" ? "Reveal answer" : "Next question"}
+                {state.phase === "question"
+                  ? "Reveal answer"
+                  : state.questionNumber >= state.totalQuestions
+                  ? "End quiz"
+                  : "Next question"}
+              </button>
+            )}
+            {state.status === "live" && state.phase === "revealed" && state.questionNumber >= state.totalQuestions && (
+              <button disabled className="btn-ghost opacity-40 cursor-default">
+                Ending automatically…
               </button>
             )}
             {state.status === "live" && (
@@ -242,15 +253,42 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
         {state.status === "waiting" && (
           <section className="case-panel p-10 mb-8 flex flex-col md:flex-row items-center gap-10">
             <div className="bg-ivory p-4 shrink-0">
-              <QRCodeSVG value={joinUrl} size={200} bgColor="#F3EDE1" fgColor="#12100D" />
+              <QRCodeSVG value={joinUrl} size={340} bgColor="#F3EDE1" fgColor="#12100D" />
             </div>
             <div>
               <MeridianWordmark size="small" />
               <p className="font-display italic text-2xl mt-4 mb-2">Scan to join</p>
               <p className="text-parchment/50 text-sm break-all mb-1">{joinUrl}</p>
-              <p className="text-parchment/40 text-xs">No app, account, or password needed.</p>
+              {state.shortCode && (
+                <p className="text-parchment/50 text-sm mb-1">
+                  Or go to <span className="text-gold">{joinUrl.split("/join")[0]}/join</span> and enter code{" "}
+                  <span className="font-dial text-gold text-lg tracking-widest">{state.shortCode}</span>
+                </p>
+              )}
+              <p className="text-parchment/40 text-xs mb-4">No app, account, or password needed.</p>
+              <button onClick={() => setQrFullscreen(true)} className="btn-ghost text-sm px-4 py-2">
+                Show QR full screen
+              </button>
             </div>
           </section>
+        )}
+
+        {qrFullscreen && (
+          <div className="fixed inset-0 z-50 bg-charcoal flex flex-col items-center justify-center gap-8 p-8">
+            <MeridianWordmark />
+            <div className="bg-ivory p-8">
+              <QRCodeSVG value={joinUrl} size={520} bgColor="#F3EDE1" fgColor="#12100D" />
+            </div>
+            {state.shortCode && (
+              <p className="text-2xl text-parchment/70">
+                Or enter code <span className="font-dial text-gold text-4xl tracking-[0.3em]">{state.shortCode}</span> at{" "}
+                {joinUrl.split("/join")[0]}/join
+              </p>
+            )}
+            <button onClick={() => setQrFullscreen(false)} className="btn-ghost px-6 py-3">
+              Close
+            </button>
+          </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
