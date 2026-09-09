@@ -274,6 +274,27 @@ Files: `src/app/api/sessions/[id]/state/route.ts`,
 `src/app/play/[sessionId]/page.tsx`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 13. Auto-reveal now also triggers when everyone has answered, not just on timeout
+
+Previously the only automatic trigger was the timer expiring. Now there
+are two, either is enough: the timer runs out (unchanged), **or**
+everyone who joined has already answered — no reason to make a room of
+40 people wait out a 20-second timer if all 40 answered in the first 6
+seconds. The presenter can still always reveal early manually too, same
+as before; this is purely an additional automatic trigger, not a
+replacement for the manual one.
+
+To keep this cheap, the "has everyone answered" check only runs when the
+timer hasn't expired yet — if it already has, that check would be
+redundant, so the two extra COUNT queries this needs are skipped entirely
+in that case.
+
+Confirmed unchanged, per your message: advancing to the *next* question
+after a reveal is still always a manual presenter click — this only
+affects when a question gets revealed, never when the room moves on.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

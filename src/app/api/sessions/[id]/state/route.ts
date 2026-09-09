@@ -79,15 +79,36 @@ async function toLocalizedQuestion(session: LiveSession, index: number, language
 /**
  * Self-healing auto-reveal: Vercel Cron can't tick sub-minute, so instead
  * of depending on a background sweep, whichever request notices the
- * current question's phase_deadline has passed flips it to 'revealed'
- * right here. With the admin dashboard polling every 2.5s AND every
- * participant polling every 2.5s, a passed deadline gets caught within a
- * couple of seconds in practice — no cron needed. Returns the
- * (possibly-updated) session.
+ * current question is ready to reveal flips it right here. Two triggers,
+ * either one is enough:
+ *   1. The timer ran out (phase_deadline has passed) — checked first
+ *      since it's free (just a timestamp comparison, no DB query).
+ *   2. Everyone who joined has already answered — checked only if the
+ *      timer hasn't expired yet, since that's the only case where this
+ *      extra pair of COUNT queries is actually needed. No need to make
+ *      everyone wait out a 20-second timer if all 40 people in the room
+ *      answered in the first 6 seconds.
+ * With the admin dashboard and every participant polling every 2-2.5s,
+ * either condition gets caught within a couple of seconds in practice —
+ * no cron needed. Returns the (possibly-updated) session.
  */
 async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
-  if (session.phase !== "question" || !session.phase_deadline) return session;
-  if (new Date(session.phase_deadline).getTime() > Date.now()) return session;
+  if (session.phase !== "question") return session;
+
+  const deadlinePassed = session.phase_deadline ? new Date(session.phase_deadline).getTime() <= Date.now() : false;
+
+  if (!deadlinePassed) {
+    const [{ count: joinedCount }, { count: answeredCount }] = await Promise.all([
+      supabaseAdmin.from("participants").select("*", { count: "exact", head: true }).eq("session_id", session.id),
+      supabaseAdmin
+        .from("answers")
+        .select("*", { count: "exact", head: true })
+        .eq("session_id", session.id)
+        .eq("question_index", session.current_question_index)
+    ]);
+    const everyoneAnswered = (joinedCount ?? 0) > 0 && (answeredCount ?? 0) >= (joinedCount ?? 0);
+    if (!everyoneAnswered) return session;
+  }
 
   const { data: updated } = await supabaseAdmin
     .from("sessions")
