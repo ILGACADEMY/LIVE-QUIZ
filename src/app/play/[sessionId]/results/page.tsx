@@ -54,6 +54,7 @@ export default function ResultsPage({
   const [rank, setRank] = useState<number | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [feedback, setFeedback] = useState<Record<number, string>>({});
+  const [aiLoading, setAiLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -77,7 +78,9 @@ export default function ResultsPage({
 
   useEffect(() => {
     if (!data || !data.aiFeedbackEnabled) return;
-    fetch("/api/ai/analysis", {
+    setAiLoading(true);
+
+    const profilePromise = fetch("/api/ai/analysis", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "profile", sessionId: params.sessionId, participantId })
@@ -86,9 +89,9 @@ export default function ResultsPage({
       .then((d) => setProfile(d.profile))
       .catch(() => {});
 
-    data.breakdown
+    const feedbackPromises = data.breakdown
       .filter((b) => !b.isCorrect)
-      .forEach((b) => {
+      .map((b) =>
         fetch("/api/ai/feedback", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -103,8 +106,14 @@ export default function ResultsPage({
           .then((d) => {
             if (d.feedback) setFeedback((prev) => ({ ...prev, [b.questionIndex]: d.feedback }));
           })
-          .catch(() => {});
-      });
+          .catch(() => {})
+      );
+
+    // Only once every AI call has settled (succeeded or failed) is the
+    // page actually done — this is what the download button waits on, so
+    // clicking "Download" before this resolves can't produce a PDF
+    // that's missing the analysis because it printed too early.
+    Promise.allSettled([profilePromise, ...feedbackPromises]).then(() => setAiLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
@@ -125,10 +134,15 @@ export default function ResultsPage({
         <p className="text-gold text-xs tracking-[0.2em] mb-3 text-center">{data.quizTitle.toUpperCase()}</p>
         <p className="font-display italic text-2xl text-center mb-4">Nice work, {data.name}</p>
 
-        <div className="flex justify-center mb-8 no-print">
-          <button onClick={() => window.print()} className="btn-ghost text-sm px-5 py-2.5">
-            Download my results (PDF)
+        <div className="flex flex-col items-center gap-2 mb-8 no-print">
+          <button
+            onClick={() => window.print()}
+            disabled={aiLoading}
+            className="btn-ghost text-sm px-5 py-2.5 disabled:opacity-50"
+          >
+            {aiLoading ? "Preparing your analysis…" : "Download my results (PDF)"}
           </button>
+          {aiLoading && <p className="text-xs text-parchment/40">Your AI analysis is still being written — this only takes a few seconds.</p>}
         </div>
 
         <div className="case-panel p-8 text-center mb-6">

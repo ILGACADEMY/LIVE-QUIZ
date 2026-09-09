@@ -50,9 +50,18 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const [answeredSoFar, setAnsweredSoFar] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const startsAtRef = useRef<number | null>(null);
+  const submittingRef = useRef(false);
 
   const fetchState = useCallback(async () => {
     if (!participantId) return;
+    // Don't let a background refresh overwrite the screen while an answer
+    // submission is still in flight — see handleSelect below for why this
+    // matters. Without this guard, tapping an answer right as a routine
+    // poll fires could revert the screen back to the question (the
+    // server hadn't recorded the answer yet when that poll ran), or on
+    // the reveal itself, briefly show "Time's up" before flipping to
+    // "Correct!" once the answer catches up.
+    if (submittingRef.current) return;
     const res = await fetch(`/api/sessions/${params.sessionId}/state?participantId=${participantId}`);
     if (!res.ok) return;
     const data = await res.json();
@@ -88,6 +97,17 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       return;
     }
   }, [participantId, params.sessionId]);
+
+  // Skip the "Nice work, tap to view results" middle step entirely — go
+  // straight to the results page the moment the quiz finishes. That
+  // intermediate screen never showed the score itself, which is very
+  // likely why "no score on my phone" was reported: it required an extra
+  // tap to a link that's easy to miss on a small screen.
+  useEffect(() => {
+    if (phase === "finished" && participantId) {
+      router.replace(`/play/${params.sessionId}/results?participantId=${participantId}`);
+    }
+  }, [phase, participantId, params.sessionId, router]);
 
   // Load participant identity from the join step.
   useEffect(() => {
@@ -177,22 +197,32 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     setSelected(key);
     setPhase("locked");
     setErrorMsg(null);
+    submittingRef.current = true;
 
-    const res = await fetch(`/api/sessions/${params.sessionId}/answer`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ participantId, questionIndex: q.question.index, selectedOption: key })
-    });
+    try {
+      const res = await fetch(`/api/sessions/${params.sessionId}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId, questionIndex: q.question.index, selectedOption: key })
+      });
 
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      setErrorMsg(data.error ?? "Could not submit your answer.");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setErrorMsg(data.error ?? "Could not submit your answer.");
+        return;
+      }
+      // No self-advance here — everyone waits together for the presenter to
+      // reveal (or the timer to run out), which arrives via the
+      // question_revealed broadcast above.
+    } finally {
+      submittingRef.current = false;
+      // One authoritative re-sync now that the submission has actually
+      // settled — covers the case where the question was already revealed
+      // (by the timer or by everyone else answering) while this request
+      // was in flight, so the reveal shown reflects the real, now-committed
+      // answer rather than a moment where it looked unanswered.
       fetchState();
-      return;
     }
-    // No self-advance here — everyone waits together for the presenter to
-    // reveal (or the timer to run out), which arrives via the
-    // question_revealed broadcast above.
   }
 
   if (phase === "loading" || phase === "waiting") {
@@ -223,7 +253,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   }
 
   if (phase === "finished") {
-    return <FinishedScreen sessionId={params.sessionId} participantId={participantId!} />;
+    return <main className="min-h-screen flex items-center justify-center text-parchment/50">Loading your results…</main>;
   }
 
   if (phase === "locked") {
@@ -303,16 +333,4 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   }
 
   return <main className="min-h-screen flex items-center justify-center text-parchment/50">Something went wrong.</main>;
-}
-
-function FinishedScreen({ sessionId, participantId }: { sessionId: string; participantId: string }) {
-  return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-      <p className="text-gold text-xs tracking-[0.2em] mb-4">QUIZ COMPLETE</p>
-      <p className="font-display italic text-2xl mb-8">Nice work — here are your results.</p>
-      <a href={`/play/${sessionId}/results?participantId=${participantId}`} className="btn-gold">
-        View my results
-      </a>
-    </main>
-  );
 }

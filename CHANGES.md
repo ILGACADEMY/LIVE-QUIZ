@@ -322,6 +322,63 @@ Files: `src/app/api/sessions/[id]/leaderboard/route.ts`,
 `src/app/leaderboard/[sessionId]/page.tsx`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 15. Fixed: answer screen reverting, "Correct" then "Time's up" flicker, missing score on finish, AI analysis missing from downloaded PDF
+
+Four related bugs, all real, all fixed:
+
+- **Tapping an answer sometimes reverted back to the question screen.**
+  Root cause: the background check that refreshes the screen every 2.5s
+  doesn't know an answer was just submitted until the server has
+  recorded it — if that refresh happened to fire in the small window
+  between tapping and the server confirming, it would see "not answered
+  yet" and revert the screen. Fixed with a guard: while a submission is
+  in flight, background refreshes are skipped entirely, and one
+  authoritative refresh runs immediately after the submission actually
+  settles.
+- **Occasionally showed "Correct!" and "Time's up" in quick succession.**
+  Same root cause, different symptom — a background refresh caught the
+  reveal a moment before this participant's own answer had finished being
+  recorded (looking exactly like an unanswered "Time's up"), then the
+  next refresh caught the real result. Fixed by the same guard above.
+- **No score/ranking visible right after finishing.** The "quiz complete"
+  screen was a dead-end middle step with no score on it at all — you had
+  to notice and tap "View my results" to see anything. Removed entirely;
+  finishing the quiz now goes straight to the results page, which already
+  had the score, percentage, and rank.
+- **AI analysis sometimes missing from the downloaded PDF.** The download
+  button used the browser's print function immediately, whenever clicked
+  — if that was before the AI profile and feedback had finished loading
+  (a real few-second delay), the PDF captured the page without them. The
+  button now shows "Preparing your analysis…" and stays disabled until
+  every AI call has actually finished, so a PDF made from this button
+  always includes the analysis when the quiz has it enabled. This also
+  directly addresses "let people read it first, then download" — this
+  results page already was that "read first" page; the fix is that
+  downloading from it now always waits for everything on it to actually
+  be there first.
+
+Files: `src/app/play/[sessionId]/page.tsx`, `src/app/play/[sessionId]/results/page.tsx`.
+
+## 16. Fixed: CSV exports came back empty
+
+Real bug, confirmed: both CSV downloads (`?type=leaderboard` and
+`?type=answers`) required `completed_at` to be set on a participant
+before including them at all. That was left over from before the
+presenter-controlled rework — in the current model, `completed_at` only
+gets set for everyone at once when the quiz naturally reaches its last
+question, and **never gets set if the presenter uses "End quiz"** to stop
+it early (confirmed by reading that route directly). So ending a quiz
+early — a completely normal thing to do — meant both exports came back
+as just a header row with nothing underneath.
+
+Fixed: exports now include every participant who joined, exactly matching
+the on-screen "Full ranking" table's behavior (which was already correct
+— this bug was specific to the CSV files, not the live view). Also added
+a "Correct" column (e.g. "3/4") and a "Completed" yes/no column to the
+leaderboard CSV, since the data was already available from the same fix.
+
+Files: `src/app/api/sessions/[id]/export/route.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
