@@ -138,6 +138,61 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const joinedCount = joined ?? 0;
     const answered = answeredForCurrent ?? 0;
 
+    // The presenter's own screen — never translated (admin always sees
+    // the source content), and unlike the participant response below,
+    // this is allowed to include the correct answer and a live response
+    // distribution once revealed. Participants only ever get a plain
+    // correct/incorrect verdict (see the participant branch further
+    // down) — the full answer and explanation live here and on the
+    // final results/download page, not on a participant's phone mid-quiz.
+    let presenterQuestion: {
+      questionText: string;
+      imageUrl: string | null;
+      mediaType: "image" | "video";
+      options: { key: "A" | "B" | "C" | "D"; text: string }[];
+      correctOption?: "A" | "B" | "C" | "D";
+      explanation?: string;
+      distribution?: { key: "A" | "B" | "C" | "D"; count: number; percent: number }[];
+    } | null = null;
+
+    const rawQuestion = session.quiz_snapshot.questions[session.current_question_index];
+    if (rawQuestion && (session.phase === "question" || session.phase === "revealed")) {
+      presenterQuestion = {
+        questionText: rawQuestion.question_text,
+        imageUrl: rawQuestion.image_url,
+        mediaType: rawQuestion.media_type ?? "image",
+        options: [
+          { key: "A", text: rawQuestion.option_a },
+          { key: "B", text: rawQuestion.option_b },
+          { key: "C", text: rawQuestion.option_c },
+          { key: "D", text: rawQuestion.option_d }
+        ]
+      };
+
+      if (session.phase === "revealed") {
+        const { data: answerRows } = await supabaseAdmin
+          .from("answers")
+          .select("selected_option")
+          .eq("session_id", params.id)
+          .eq("question_index", session.current_question_index);
+
+        const tally: Record<"A" | "B" | "C" | "D", number> = { A: 0, B: 0, C: 0, D: 0 };
+        (answerRows ?? []).forEach((a) => {
+          const key = a.selected_option as "A" | "B" | "C" | "D";
+          if (key in tally) tally[key]++;
+        });
+        const totalAnswers = answerRows?.length ?? 0;
+
+        presenterQuestion.correctOption = rawQuestion.correct_option;
+        presenterQuestion.explanation = rawQuestion.explanation;
+        presenterQuestion.distribution = (["A", "B", "C", "D"] as const).map((key) => ({
+          key,
+          count: tally[key],
+          percent: totalAnswers > 0 ? Math.round((tally[key] / totalAnswers) * 100) : 0
+        }));
+      }
+    }
+
     return NextResponse.json({
       status: session.status,
       phase: session.phase,
@@ -147,6 +202,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       totalQuestions,
       startedAt: session.started_at,
       phaseDeadline: session.phase_deadline,
+      question: presenterQuestion,
       counts: {
         joined: joinedCount,
         completed: completed ?? 0,
@@ -234,32 +290,28 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   // phase === 'revealed'
-  const rawQuestion = session.quiz_snapshot.questions[index];
-  const question = await toLocalizedQuestion(session, index, language);
-
+  // Participants get ONLY a correct/incorrect verdict here — no correct
+  // answer text, no explanation, no question content at all. The full
+  // breakdown (their answer, the correct one, the admin's explanation,
+  // and AI feedback if enabled) is available afterward on the results/
+  // download page (GET /api/sessions/:id/results), never mid-quiz on a
+  // phone. This is also why the question/explanation fields aren't
+  // fetched or localized here anymore — nothing to translate if nothing
+  // is sent.
   const { data: ownAnswer } = await supabaseAdmin
     .from("answers")
-    .select("selected_option, is_correct, question_score")
+    .select("is_correct")
     .eq("session_id", params.id)
     .eq("participant_id", participantId)
     .eq("question_index", index)
     .maybeSingle();
 
-  const wrongFeedbackField = ownAnswer
-    ? (`wrong_feedback_${ownAnswer.selected_option.toLowerCase()}` as "wrong_feedback_a" | "wrong_feedback_b" | "wrong_feedback_c" | "wrong_feedback_d")
-    : null;
-
   return NextResponse.json({
     status: "live",
     phase: "revealed",
-    question,
     questionNumber: index + 1,
     totalQuestions,
-    correctOption: rawQuestion.correct_option,
-    explanation: rawQuestion.explanation,
-    yourAnswer: ownAnswer?.selected_option ?? null,
-    isCorrect: ownAnswer?.is_correct ?? null,
-    yourWrongFeedback: ownAnswer && !ownAnswer.is_correct && wrongFeedbackField ? rawQuestion[wrongFeedbackField] : null,
+    isCorrect: ownAnswer?.is_correct ?? null, // null = they didn't answer in time
     answeredSoFar
   });
 }

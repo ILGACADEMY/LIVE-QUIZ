@@ -31,14 +31,9 @@ interface QuestionState {
 }
 
 interface RevealState {
-  question: QuestionState["question"];
   questionNumber: number;
   totalQuestions: number;
-  correctOption: OptionKey;
-  explanation: string;
-  yourAnswer: OptionKey | null;
-  isCorrect: boolean | null;
-  yourWrongFeedback: string | null;
+  isCorrect: boolean | null; // null = they didn't answer in time
 }
 
 export default function PlayPage({ params }: { params: { sessionId: string } }) {
@@ -133,7 +128,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
           // intentionally ignored here.
           return;
         }
-        const currentIndex = q?.question.index ?? reveal?.question.index;
+        const currentIndex = q?.question.index ?? (reveal ? reveal.questionNumber - 1 : undefined);
         if (currentIndex === payload.questionIndex && typeof payload.answered === "number") {
           setAnsweredSoFar(payload.answered);
         }
@@ -242,46 +237,22 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   }
 
   if (phase === "revealed" && reveal) {
-    const optionText = { A: reveal.question.option_a, B: reveal.question.option_b, C: reveal.question.option_c, D: reveal.question.option_d };
     return (
-      <main className="min-h-screen px-6 py-10 flex flex-col items-center">
+      <main className="min-h-screen px-6 py-10 flex flex-col items-center justify-center">
         <div className="w-full max-w-lg text-center">
           <p className="text-parchment/40 text-xs mb-6">
             Question {reveal.questionNumber} of {reveal.totalQuestions}
           </p>
 
-          {reveal.isCorrect === true && <p className="text-gold font-display italic text-3xl mb-4">Correct!</p>}
-          {reveal.isCorrect === false && <p className="text-crimson font-display italic text-3xl mb-4">Not quite</p>}
-          {reveal.isCorrect === null && <p className="text-parchment/60 font-display italic text-3xl mb-4">Time's up</p>}
-
-          <p className="font-display italic text-xl leading-snug mb-4">{reveal.question.question_text}</p>
-
-          <div className="case-panel p-5 mb-4 text-left">
-            <p className="field-label mb-1">Correct answer</p>
-            <p className="text-gold font-semibold">
-              {reveal.correctOption} — {optionText[reveal.correctOption]}
-            </p>
-          </div>
-
-          {reveal.yourAnswer && reveal.yourAnswer !== reveal.correctOption && (
-            <div className="case-panel p-5 mb-4 text-left">
-              <p className="field-label mb-1">Your answer</p>
-              <p className="text-crimson/80">
-                {reveal.yourAnswer} — {optionText[reveal.yourAnswer]}
-              </p>
-            </div>
-          )}
-
-          {reveal.explanation && (
-            <div className="case-panel p-5 mb-4 text-left">
-              <p className="field-label mb-1">Explanation</p>
-              <p className="text-parchment/70 text-sm leading-relaxed">{reveal.explanation}</p>
-            </div>
-          )}
-
-          {reveal.yourWrongFeedback && (
-            <p className="text-parchment/60 text-sm leading-relaxed mb-4">{reveal.yourWrongFeedback}</p>
-          )}
+          {/* Correct/incorrect only — no answer text, no explanation, no
+              question content at all. The full breakdown (their answer,
+              the correct one, the explanation, and AI feedback if
+              enabled) shows up later on the results/download page, not
+              here mid-quiz. The presenter's own screen shows the full
+              reveal and response distribution live. */}
+          {reveal.isCorrect === true && <p className="text-gold font-display italic text-5xl mb-4">Correct!</p>}
+          {reveal.isCorrect === false && <p className="text-crimson font-display italic text-5xl mb-4">Not quite</p>}
+          {reveal.isCorrect === null && <p className="text-parchment/60 font-display italic text-5xl mb-4">Time's up</p>}
 
           <p className="text-parchment/40 text-xs mt-6">Waiting for the instructor to continue…</p>
         </div>

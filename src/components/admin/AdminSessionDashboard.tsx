@@ -17,6 +17,16 @@ interface AdminLeaderboardRow {
   completedAt: string;
 }
 
+interface PresenterQuestion {
+  questionText: string;
+  imageUrl: string | null;
+  mediaType: "image" | "video";
+  options: { key: "A" | "B" | "C" | "D"; text: string }[];
+  correctOption?: "A" | "B" | "C" | "D";
+  explanation?: string;
+  distribution?: { key: "A" | "B" | "C" | "D"; count: number; percent: number }[];
+}
+
 interface StateResponse {
   status: "waiting" | "live" | "finished";
   phase: "waiting" | "question" | "revealed" | "finished";
@@ -25,6 +35,7 @@ interface StateResponse {
   totalQuestions: number;
   startedAt: string | null;
   phaseDeadline: string | null;
+  question: PresenterQuestion | null;
   counts: { joined: number; completed: number; answered: number; pending: number };
 }
 
@@ -210,7 +221,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           <Stat label="Pending" value={state.counts.pending} />
         </div>
 
-        <div className="case-panel p-6 grid grid-cols-2 md:grid-cols-3 gap-6 text-sm">
+        <div className="case-panel p-6 grid grid-cols-2 md:grid-cols-3 gap-6 text-sm mb-6">
           <div>
             <p className="field-label mb-1">Question</p>
             <p className="font-dial text-lg">
@@ -222,6 +233,61 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             <p className="font-dial text-lg capitalize">{state.status === "waiting" ? "Not started" : state.phase}</p>
           </div>
         </div>
+
+        {/* Live question + (once revealed) the correct answer and response
+            distribution — presenter-only. Participants only ever see a
+            plain correct/incorrect verdict on their own phones; the full
+            picture lives here, and again afterward on each participant's
+            results/download page. */}
+        {state.question && (
+          <div className="case-panel p-6 mb-6">
+            <p className="text-lg font-medium mb-4">{state.question.questionText}</p>
+            {state.question.imageUrl &&
+              (state.question.mediaType === "video" ? (
+                <video src={state.question.imageUrl} controls className="w-full max-h-72 object-contain bg-black mb-4" />
+              ) : (
+                <img src={state.question.imageUrl} alt="" className="w-full max-h-72 object-cover mb-4" />
+              ))}
+
+            <div className="flex flex-col gap-2">
+              {state.question.options.map((opt) => {
+                const dist = state.question!.distribution?.find((d) => d.key === opt.key);
+                const isCorrect = state.question!.correctOption === opt.key;
+                return (
+                  <div key={opt.key} className="relative">
+                    <div
+                      className={`flex items-center justify-between px-4 py-3 border text-sm relative overflow-hidden ${
+                        isCorrect ? "border-gold" : "border-hairline"
+                      }`}
+                    >
+                      {dist && (
+                        <div
+                          className="absolute inset-y-0 left-0 bg-gold/10"
+                          style={{ width: `${dist.percent}%` }}
+                          aria-hidden
+                        />
+                      )}
+                      <span className="relative z-10">
+                        <span className="text-parchment/40 mr-2">{opt.key}</span>
+                        {opt.text}
+                        {isCorrect && <span className="text-gold ml-2">✓ Correct</span>}
+                      </span>
+                      {dist && (
+                        <span className="relative z-10 font-dial text-xs text-parchment/60 shrink-0 ml-3">
+                          {dist.count} · {dist.percent}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {state.question.explanation && (
+              <p className="text-sm text-parchment/60 mt-4 border-t border-hairline pt-4">{state.question.explanation}</p>
+            )}
+          </div>
+        )}
 
         {state.status === "finished" && (
           <>

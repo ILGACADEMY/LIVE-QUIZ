@@ -226,6 +226,54 @@ where it's still live and prominent.
 
 Files: `src/app/join/[sessionId]/page.tsx`, `src/app/play/[sessionId]/page.tsx`.
 
+## 11. Expanded avatar set to 500 icons
+
+Previously only 12 emoji were in rotation, so in any room over 12 people
+duplicates were guaranteed. Now there are 500 distinct emoji — generated
+and deduplicated programmatically (not hand-typed) to rule out accidental
+repeats or invalid characters. This is purely static text data, so it
+adds no cost and negligible bundle size — no image generation, no
+storage, nothing ongoing.
+
+Assignment is still simple random selection (unchanged), so with 500
+options collisions are far rarer than before but not impossible in a very
+large room — happy to make assignment "no repeats until everyone's had a
+distinct one" if that matters for a specific session.
+
+Files: `src/lib/avatars.ts`.
+
+## 12. Reveal redesigned: presenter sees everything, participants see only correct/incorrect
+
+Previously the full reveal (correct answer, explanation) went straight to
+every participant's phone, and the presenter's own dashboard showed
+nothing about the question at all — not even while it was live. Both
+sides of that are now fixed:
+
+- **Presenter dashboard** now shows the live question and options while
+  it's active, and once revealed, the correct answer, a per-option
+  response distribution (count + percentage, with a filled bar), and the
+  question's explanation — all presenter-only, live, as it happens.
+- **Participant's phone** shows only a plain "Correct!" / "Not quite" /
+  "Time's up" verdict at reveal — no answer text, no explanation, no
+  question content at all. This isn't just hidden in the UI: the
+  server-side response to participants during reveal no longer includes
+  any of that data in the first place, so it can't be seen via the
+  browser's network inspector either.
+- **The full breakdown moves to the results/download page** — this
+  already existed (per-question correct/incorrect, the correct answer,
+  the explanation, and AI feedback when enabled) and needed no changes;
+  it's now the *only* place a participant sees the answer content, rather
+  than duplicating it mid-quiz.
+
+Note: this does not change the Supabase realtime-connection capacity
+question from earlier — it reduces payload size slightly but doesn't
+affect how many concurrent connections a session uses. That's a separate,
+still-open optimization.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`,
+`src/app/play/[sessionId]/page.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
