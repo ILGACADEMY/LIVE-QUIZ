@@ -55,7 +55,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (type === "leaderboard") {
     const totalQuestions = session.quiz_snapshot.questions.length;
     const rows: (string | number)[][] = [
-      ["Rank", "Name", "Total score", "Base score", "Speed bonus", "Percentage", "Pass/Fail", "Time"]
+      ["Rank", "Name", "Store", "City", "Mobile", "Email", "Total score", "Base score", "Speed bonus", "Percentage", "Pass/Fail", "Time"]
     ];
     participants.forEach((p, i) => {
       const percentage = Math.round((p.base_score / totalQuestions) * 100);
@@ -66,6 +66,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       rows.push([
         i + 1,
         p.name,
+        p.store ?? "",
+        p.city ?? "",
+        p.mobile ?? "",
+        p.email ?? "",
         p.total_score,
         p.base_score,
         p.speed_score,

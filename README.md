@@ -1,8 +1,22 @@
-# ILG Academy — Live Quiz Engine
+# Meridian — ILG Academy Live Quiz Engine
 
 A reusable, Mentimeter/Kahoot-style live quiz platform built for ILG Academy: create unlimited quiz templates in a visual builder, launch a QR-code live session for hundreds of participants, score answers with a server-authoritative speed bonus, and get AI-generated feedback and analysis — all without ever touching code after setup.
 
 This document assumes no prior experience with Next.js or Supabase. Follow it top to bottom.
+
+## What's new in this version
+
+This is the original `ILGACADEMY/LIVE-QUIZ` codebase with the following merged in — everything below is a genuine behavior change, not a cosmetic rename:
+
+- **Presenter-controlled, synchronized sessions.** One question is now live for the whole room at once, driven by the presenter's Reveal/Next control and a per-question timer, instead of each participant progressing independently.
+- **Image AND video questions**, with a fixed upload bug that was previously failing silently.
+- **Required Name, Store, and City on join**, plus a Mobile-or-Email requirement used specifically to stop the same person completing a session twice (see "Duplicate prevention" below — and why IMEI-based checking isn't possible from a web app, ever).
+- **Leaderboard filtering** by store and by city (public leaderboard: scoped Top 10s; admin dashboard: full search).
+- **One-time logo upload** that appears on every page automatically.
+- **The Meridian wordmark** (a distinct display font, `Italiana`) as the cover brand on the join screen and the presenter's QR panel.
+
+See `CHANGES.md` for the full technical rationale behind each of these.
+
 
 ---
 

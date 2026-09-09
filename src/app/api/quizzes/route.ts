@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
       back_navigation_enabled: body.back_navigation_enabled ?? false,
       scoring_mode: body.scoring_mode ?? "speed_bonus",
       speed_bonus_window_seconds: body.speed_bonus_window_seconds ?? 20,
+      question_timer_seconds: body.question_timer_seconds ?? 20,
+      translation_enabled: body.translation_enabled ?? false,
       after_answer_mode: body.after_answer_mode ?? "auto_advance",
       status: "draft"
     })

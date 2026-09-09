@@ -1,8 +1,8 @@
 {
-  "name": "ilg-live-quiz",
+  "name": "meridian-quiz",
   "version": "1.0.0",
   "private": true,
-  "description": "ILG Academy Live Quiz Engine — reusable quiz builder, live QR-join sessions, server-authoritative speed scoring, Top 10 leaderboard, and AI feedback.",
+  "description": "Meridian — ILG Academy's live training quiz engine: quiz builder, presenter-controlled QR-join sessions, server-authoritative speed scoring, filterable Top 10 leaderboard, and AI feedback.",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

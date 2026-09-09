@@ -20,6 +20,7 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [customWindow, setCustomWindow] = useState(false);
+  const [customTimer, setCustomTimer] = useState(false);
 
   useEffect(() => {
     fetch(`/api/quizzes/${quizId}`)
@@ -28,6 +29,7 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
         setQuiz(data.quiz);
         setQuestions(data.questions ?? []);
         setCustomWindow(!SPEED_WINDOWS.includes(data.quiz.speed_bonus_window_seconds));
+        setCustomTimer(!SPEED_WINDOWS.includes(data.quiz.question_timer_seconds));
       });
   }, [quizId]);
 
@@ -188,6 +190,23 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
               </div>
               <Toggle label="Leaderboard" checked={quiz.leaderboard_enabled} onChange={(v) => setQuizField("leaderboard_enabled", v)} />
               <Toggle label="AI feedback" checked={quiz.ai_feedback_enabled} onChange={(v) => setQuizField("ai_feedback_enabled", v)} />
+              <Toggle
+                label="Multi-language translation"
+                checked={quiz.translation_enabled}
+                onChange={(v) => setQuizField("translation_enabled", v)}
+              />
+              {quiz.translation_enabled && (
+                <p className="text-xs text-parchment/40 -mt-2 mb-2 ml-1">
+                  Participants will see a language picker on the join screen. Each question is translated by AI on
+                  first use per language — this has a real, ongoing AI cost, unlike the other toggles here.
+                </p>
+              )}
+              {!quiz.translation_enabled && (
+                <p className="text-xs text-parchment/30 -mt-2 mb-2 ml-1">
+                  Off by default to avoid AI translation costs. When off, every participant sees this quiz in
+                  English only — the language picker is hidden on the join screen entirely.
+                </p>
+              )}
               <Toggle label="Randomize questions" checked={quiz.randomize_questions} onChange={(v) => setQuizField("randomize_questions", v)} />
               <Toggle label="Randomize answers" checked={quiz.randomize_answers} onChange={(v) => setQuizField("randomize_answers", v)} />
               <Toggle label="Allow back navigation" checked={quiz.back_navigation_enabled} onChange={(v) => setQuizField("back_navigation_enabled", v)} />
@@ -258,7 +277,50 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
             </section>
 
             <section className="case-panel p-6 mb-6">
-              <p className="field-label mb-4">After answering</p>
+              <p className="field-label mb-4">Question timer (live sessions)</p>
+              <p className="text-xs text-parchment/40 mb-3">
+                How long each question stays open in a LIVE session before it auto-reveals. The presenter can also reveal early at any time.
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {SPEED_WINDOWS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => {
+                      setCustomTimer(false);
+                      setQuizField("question_timer_seconds", s);
+                    }}
+                    className={`px-4 py-2 text-sm border transition-colors ${
+                      !customTimer && quiz.question_timer_seconds === s
+                        ? "bg-gold text-charcoal border-gold"
+                        : "border-hairline hover:border-gold/50"
+                    }`}
+                  >
+                    {s}s
+                  </button>
+                ))}
+                <button
+                  onClick={() => setCustomTimer(true)}
+                  className={`px-4 py-2 text-sm border transition-colors ${
+                    customTimer ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"
+                  }`}
+                >
+                  Custom
+                </button>
+              </div>
+              {customTimer && (
+                <input
+                  type="number"
+                  min={5}
+                  value={quiz.question_timer_seconds}
+                  onChange={(e) => setQuizField("question_timer_seconds", Number(e.target.value))}
+                  className="field-input max-w-[160px]"
+                />
+              )}
+            </section>
+
+            <section className="case-panel p-6 mb-6">
+              <p className="field-label mb-1">After answering</p>
+              <p className="text-xs text-parchment/40 mb-3">Used by Preview only — a live session is always presenter-controlled regardless of this setting.</p>
               <div className="grid grid-cols-2 gap-3">
                 {(["auto_advance", "next_button"] as AfterAnswerMode[]).map((mode) => (
                   <button

@@ -10,6 +10,7 @@
 export const QUESTION_FIELDS = [
   "question_text",
   "image_url",
+  "media_type",
   "option_a",
   "option_b",
   "option_c",
@@ -28,7 +29,9 @@ export const QUESTION_FIELDS = [
 export function toQuestionRow(q: Record<string, unknown>, quizId: string, orderIndex: number) {
   const row: Record<string, unknown> = { quiz_id: quizId, order_index: orderIndex };
   for (const field of QUESTION_FIELDS) {
-    row[field] = q[field] ?? (field === "image_url" ? null : "");
+    if (field === "image_url") row[field] = q[field] ?? null;
+    else if (field === "media_type") row[field] = q[field] ?? "image";
+    else row[field] = q[field] ?? "";
   }
   return row;
 }

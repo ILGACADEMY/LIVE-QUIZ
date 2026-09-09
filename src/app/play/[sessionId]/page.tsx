@@ -7,18 +7,38 @@ import AnswerGrid from "@/components/participant/AnswerGrid";
 import CountdownDial from "@/components/participant/CountdownDial";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
-type Phase = "loading" | "waiting" | "countdown" | "question" | "locked" | "finished" | "ended" | "error";
+type Phase = "loading" | "waiting" | "countdown" | "question" | "locked" | "revealed" | "finished" | "ended" | "error";
 
 interface QuestionState {
-  question: { index: number; question_text: string; image_url: string | null; option_a: string; option_b: string; option_c: string; option_d: string };
+  question: {
+    index: number;
+    question_text: string;
+    image_url: string | null;
+    media_type?: "image" | "video";
+    option_a: string;
+    option_b: string;
+    option_c: string;
+    option_d: string;
+  };
   questionNumber: number;
   totalQuestions: number;
   questionStartedAt: string;
   speedBonusEnabled: boolean;
   speedBonusWindowSeconds: number;
-  afterAnswerMode: "auto_advance" | "next_button";
+  questionTimerSeconds: number;
   answeredSoFar: number;
   deadline: number | null;
+}
+
+interface RevealState {
+  question: QuestionState["question"];
+  questionNumber: number;
+  totalQuestions: number;
+  correctOption: OptionKey;
+  explanation: string;
+  yourAnswer: OptionKey | null;
+  isCorrect: boolean | null;
+  yourWrongFeedback: string | null;
 }
 
 export default function PlayPage({ params }: { params: { sessionId: string } }) {
@@ -29,9 +49,11 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const [avatar, setAvatar] = useState("🦉");
   const [countdownSeconds, setCountdownSeconds] = useState(3);
   const [q, setQ] = useState<QuestionState | null>(null);
+  const [reveal, setReveal] = useState<RevealState | null>(null);
   const [selected, setSelected] = useState<OptionKey | null>(null);
   const [dialSeconds, setDialSeconds] = useState(0);
   const [answeredSoFar, setAnsweredSoFar] = useState(0);
+  const [joinedCount, setJoinedCount] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const startsAtRef = useRef<number | null>(null);
 
@@ -41,11 +63,11 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     if (!res.ok) return;
     const data = await res.json();
 
-    if (data.status === "finished" && data.phase !== "finished") {
+    if (data.phase === "ended") {
       setPhase("ended");
       return;
     }
-    if (data.phase === "finished" || data.totalScore !== undefined) {
+    if (data.phase === "finished") {
       setPhase("finished");
       return;
     }
@@ -53,13 +75,35 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       setPhase((p) => (p === "countdown" ? p : "waiting"));
       return;
     }
+    if (data.phase === "locked") {
+      setAnsweredSoFar(data.answeredSoFar);
+      setPhase("locked");
+      return;
+    }
     if (data.phase === "question") {
       setQ(data);
       setAnsweredSoFar(data.answeredSoFar);
       setSelected(null);
+      setReveal(null);
       setPhase("question");
+      return;
+    }
+    if (data.phase === "revealed") {
+      setReveal(data);
+      setPhase("revealed");
+      return;
     }
   }, [participantId, params.sessionId]);
+
+  // One-time fetch for the initial join count (the participant-scoped
+  // state endpoint doesn't include it — only the admin/no-participantId
+  // shape does — so this is a single separate call, not part of polling).
+  useEffect(() => {
+    fetch(`/api/sessions/${params.sessionId}/state`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setJoinedCount(data.counts?.joined ?? null))
+      .catch(() => {});
+  }, [params.sessionId]);
 
   // Load participant identity from the join step.
   useEffect(() => {
@@ -74,7 +118,10 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     if (parsed.avatar) setAvatar(parsed.avatar);
   }, [params.sessionId, router]);
 
-  // Waiting room: poll as a fallback, and listen for the synced start broadcast.
+  // Poll as a fallback, and listen for the presenter's broadcasts for
+  // instant transitions — question started, revealed, or advanced, plus
+  // the live answer count. One question is shared by the whole room, so
+  // every one of these broadcasts is relevant to every participant.
   useEffect(() => {
     if (!participantId) return;
     fetchState();
@@ -86,10 +133,17 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         startsAtRef.current = new Date((msg.payload as { startsAt: string }).startsAt).getTime();
         setPhase("countdown");
       })
-      .on("broadcast", { event: "quiz_ended" }, () => setPhase("ended"))
+      .on("broadcast", { event: "quiz_ended" }, () => fetchState())
+      .on("broadcast", { event: "question_revealed" }, () => fetchState())
+      .on("broadcast", { event: "question_advanced" }, () => fetchState())
       .on("broadcast", { event: "answer_count" }, (msg) => {
-        const payload = msg.payload as { questionIndex?: number; answered?: number };
-        if (q && payload.questionIndex === q.question.index && typeof payload.answered === "number") {
+        const payload = msg.payload as { questionIndex?: number; answered?: number; type?: string; joined?: number };
+        if (payload.type === "joined" && typeof payload.joined === "number") {
+          setJoinedCount(payload.joined);
+          return;
+        }
+        const currentIndex = q?.question.index ?? reveal?.question.index;
+        if (currentIndex === payload.questionIndex && typeof payload.answered === "number") {
           setAnsweredSoFar(payload.answered);
         }
       })
@@ -118,13 +172,16 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     return () => clearInterval(tick);
   }, [phase, fetchState]);
 
-  // Visual speed-bonus dial, ticking down locally from the server-reported start time.
+  // Visual countdown dial, ticking down locally from the server-reported
+  // start time — this now always runs (question_timer_seconds applies to
+  // every scoring mode), not only when the speed bonus is enabled.
   useEffect(() => {
-    if (phase !== "question" || !q?.speedBonusEnabled) return;
+    if (phase !== "question" || !q) return;
     const started = new Date(q.questionStartedAt).getTime();
+    const windowSeconds = q.questionTimerSeconds ?? q.speedBonusWindowSeconds ?? 20;
     const tick = setInterval(() => {
       const elapsed = (Date.now() - started) / 1000;
-      setDialSeconds(Math.max(0, q.speedBonusWindowSeconds - elapsed));
+      setDialSeconds(Math.max(0, windowSeconds - elapsed));
     }, 100);
     return () => clearInterval(tick);
   }, [phase, q]);
@@ -147,13 +204,9 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       fetchState();
       return;
     }
-
-    const { isLastQuestion } = await res.json();
-    if (q.afterAnswerMode === "auto_advance") {
-      setTimeout(fetchState, 1000);
-    } else if (isLastQuestion) {
-      setTimeout(fetchState, 300);
-    }
+    // No self-advance here — everyone waits together for the presenter to
+    // reveal (or the timer to run out), which arrives via the
+    // question_revealed broadcast above.
   }
 
   if (phase === "loading" || phase === "waiting") {
@@ -162,7 +215,12 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         <p className="text-gold text-xs tracking-[0.2em] mb-4">YOU&rsquo;RE IN</p>
         <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
-        <p className="text-parchment/50">Waiting for the instructor to start…</p>
+        <p className="text-parchment/50 mb-3">Waiting for the instructor to start…</p>
+        {joinedCount !== null && (
+          <p className="text-gold/70 text-xs font-dial tracking-wide">
+            {joinedCount} {joinedCount === 1 ? "person has" : "people have"} joined
+          </p>
+        )}
       </main>
     );
   }
@@ -187,7 +245,65 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     return <FinishedScreen sessionId={params.sessionId} participantId={participantId!} />;
   }
 
-  if ((phase === "question" || phase === "locked") && q) {
+  if (phase === "locked") {
+    return (
+      <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
+        <p className="text-gold font-body font-semibold tracking-wide mb-2">ANSWER LOCKED</p>
+        <p className="text-parchment/40 text-xs font-dial mb-6">{answeredSoFar} answered</p>
+        <p className="text-parchment/50 text-sm">Waiting for the instructor to reveal the answer…</p>
+      </main>
+    );
+  }
+
+  if (phase === "revealed" && reveal) {
+    const optionText = { A: reveal.question.option_a, B: reveal.question.option_b, C: reveal.question.option_c, D: reveal.question.option_d };
+    return (
+      <main className="min-h-screen px-6 py-10 flex flex-col items-center">
+        <div className="w-full max-w-lg text-center">
+          <p className="text-parchment/40 text-xs mb-6">
+            Question {reveal.questionNumber} of {reveal.totalQuestions}
+          </p>
+
+          {reveal.isCorrect === true && <p className="text-gold font-display italic text-3xl mb-4">Correct!</p>}
+          {reveal.isCorrect === false && <p className="text-crimson font-display italic text-3xl mb-4">Not quite</p>}
+          {reveal.isCorrect === null && <p className="text-parchment/60 font-display italic text-3xl mb-4">Time's up</p>}
+
+          <p className="font-display italic text-xl leading-snug mb-4">{reveal.question.question_text}</p>
+
+          <div className="case-panel p-5 mb-4 text-left">
+            <p className="field-label mb-1">Correct answer</p>
+            <p className="text-gold font-semibold">
+              {reveal.correctOption} — {optionText[reveal.correctOption]}
+            </p>
+          </div>
+
+          {reveal.yourAnswer && reveal.yourAnswer !== reveal.correctOption && (
+            <div className="case-panel p-5 mb-4 text-left">
+              <p className="field-label mb-1">Your answer</p>
+              <p className="text-crimson/80">
+                {reveal.yourAnswer} — {optionText[reveal.yourAnswer]}
+              </p>
+            </div>
+          )}
+
+          {reveal.explanation && (
+            <div className="case-panel p-5 mb-4 text-left">
+              <p className="field-label mb-1">Explanation</p>
+              <p className="text-parchment/70 text-sm leading-relaxed">{reveal.explanation}</p>
+            </div>
+          )}
+
+          {reveal.yourWrongFeedback && (
+            <p className="text-parchment/60 text-sm leading-relaxed mb-4">{reveal.yourWrongFeedback}</p>
+          )}
+
+          <p className="text-parchment/40 text-xs mt-6">Waiting for the instructor to continue…</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "question" && q) {
     return (
       <main className="min-h-screen px-6 py-10 flex flex-col items-center">
         <div className="w-full max-w-lg">
@@ -199,29 +315,30 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
           </div>
 
           <div className="flex items-start gap-4 mb-6">
-            {q.speedBonusEnabled && phase === "question" && (
-              <CountdownDial secondsRemaining={dialSeconds} windowSeconds={q.speedBonusWindowSeconds} />
-            )}
+            <CountdownDial secondsRemaining={dialSeconds} windowSeconds={q.questionTimerSeconds ?? q.speedBonusWindowSeconds} />
             <p className="font-display italic text-2xl leading-snug">{q.question.question_text}</p>
           </div>
 
-          {q.question.image_url && (
-            <img src={q.question.image_url} alt="" className="w-full max-h-64 object-cover border border-hairline mb-6" />
+          {q.question.image_url && q.question.media_type === "video" ? (
+            <video
+              src={q.question.image_url}
+              controls
+              playsInline
+              className="w-full max-h-64 object-contain bg-black border border-hairline mb-6"
+            />
+          ) : (
+            q.question.image_url && (
+              <img src={q.question.image_url} alt="" className="w-full max-h-64 object-cover border border-hairline mb-6" />
+            )
           )}
 
           <AnswerGrid
             options={{ A: q.question.option_a, B: q.question.option_b, C: q.question.option_c, D: q.question.option_d }}
             selected={selected}
-            locked={phase === "locked"}
+            locked={false}
             onSelect={handleSelect}
           />
 
-          {phase === "locked" && !errorMsg && (
-            <div className="mt-6 text-center">
-              <p className="text-gold font-body font-semibold tracking-wide">ANSWER LOCKED</p>
-              <p className="text-parchment/40 text-xs mt-1 font-dial">{answeredSoFar} answered</p>
-            </div>
-          )}
           {errorMsg && <p className="text-crimson text-sm mt-6 text-center">{errorMsg}</p>}
         </div>
       </main>

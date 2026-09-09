@@ -1,28 +1,67 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { broadcastSessionEvent } from "@/lib/realtime";
-import { randomAvatar, randomGuestName } from "@/lib/avatars";
+import { randomAvatar } from "@/lib/avatars";
 import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 
-// POST /api/sessions/:id/join — { name?, language? }. Name is optional —
-// leave it blank and we assign a fun guest name + cartoon avatar instead.
-// No account, no email, no password. Returns a participant id the browser
-// stores (e.g. in sessionStorage) to authenticate subsequent calls.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const { name, language } = await req.json();
-  const trimmed = typeof name === "string" ? name.trim() : "";
+function normalizeMobile(raw: string): string {
+  // Keep digits and a single leading + — strips spaces/dashes/parens so
+  // "+971 50 123 4567" and "+971-50-123-4567" match as the same number.
+  const trimmed = raw.trim();
+  const hasPlus = trimmed.startsWith("+");
+  const digits = trimmed.replace(/\D/g, "");
+  return (hasPlus ? "+" : "") + digits;
+}
 
-  if (trimmed.length > 60) {
-    return NextResponse.json({ error: "Name is too long." }, { status: 400 });
+function normalizeEmail(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+// POST /api/sessions/:id/join — { name, store, city, mobile?, email?, language? }
+// Name, store, and city are all required. At least one of mobile/email is
+// required too — this is what makes duplicate-attempt prevention possible:
+// without SOME identifier that survives a cleared browser or a different
+// device, there's no way to recognize "this is the same person again."
+// See the note in the README about why device-level checks (IMEI etc.)
+// aren't possible from a web app at all — this is the strongest check that
+// actually is possible.
+//
+// If the mobile or email has already joined THIS session, we don't create
+// a second participant or reject them outright — we return their EXISTING
+// participant record instead. This covers the legitimate case (their
+// browser storage got cleared, they refresh and re-submit) without ever
+// producing two scored entries for the same person.
+export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const { name, store, city, mobile, email, language } = await req.json();
+
+  const trimmedName = typeof name === "string" ? name.trim() : "";
+  const trimmedStore = typeof store === "string" ? store.trim() : "";
+  const trimmedCity = typeof city === "string" ? city.trim() : "";
+  const rawMobile = typeof mobile === "string" ? mobile.trim() : "";
+  const rawEmail = typeof email === "string" ? email.trim() : "";
+
+  if (!trimmedName) return NextResponse.json({ error: "Please enter your name." }, { status: 400 });
+  if (trimmedName.length > 60) return NextResponse.json({ error: "Name is too long." }, { status: 400 });
+  if (!trimmedStore) return NextResponse.json({ error: "Please enter your store." }, { status: 400 });
+  if (trimmedStore.length > 100) return NextResponse.json({ error: "Store name is too long." }, { status: 400 });
+  if (!trimmedCity) return NextResponse.json({ error: "Please enter your city." }, { status: 400 });
+  if (trimmedCity.length > 100) return NextResponse.json({ error: "City name is too long." }, { status: 400 });
+  if (!rawMobile && !rawEmail) {
+    return NextResponse.json({ error: "Please enter your mobile number or email address." }, { status: 400 });
   }
 
-  const languageCode = SUPPORTED_LANGUAGES.some((l) => l.code === language) ? language : "en";
-  const finalName = trimmed || randomGuestName();
-  const avatar = randomAvatar();
+  const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : null;
+  const normalizedEmail = rawEmail ? normalizeEmail(rawEmail) : null;
+  if (normalizedMobile && normalizedMobile.replace("+", "").length < 6) {
+    return NextResponse.json({ error: "That mobile number looks incomplete." }, { status: 400 });
+  }
+  if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    return NextResponse.json({ error: "That email address looks incomplete." }, { status: 400 });
+  }
 
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("sessions")
-    .select("id, status")
+    .select("id, status, quiz_snapshot")
     .eq("id", params.id)
     .single();
   if (sessionError || !session) {
@@ -32,12 +71,60 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "This quiz session has already ended." }, { status: 410 });
   }
 
+  // Server-side enforcement, not just a hidden UI element: if this quiz
+  // doesn't have translation turned on, force English regardless of what
+  // was submitted. This is what actually guarantees zero AI translation
+  // calls (and zero cost) for a quiz the admin didn't opt in — the join
+  // screen also hides the language picker, but that alone wouldn't stop
+  // someone hitting this endpoint directly with a different language.
+  const translationEnabled = Boolean(session.quiz_snapshot?.quiz?.translation_enabled);
+  const languageCode = translationEnabled && SUPPORTED_LANGUAGES.some((l) => l.code === language) ? language : "en";
+
+  // Look for an existing participant in THIS session matching either
+  // identifier before creating a new one.
+  if (normalizedMobile || normalizedEmail) {
+    let query = supabaseAdmin.from("participants").select("*").eq("session_id", params.id);
+    if (normalizedMobile && normalizedEmail) {
+      query = query.or(`mobile.eq.${normalizedMobile},email.eq.${normalizedEmail}`);
+    } else if (normalizedMobile) {
+      query = query.eq("mobile", normalizedMobile);
+    } else {
+      query = query.eq("email", normalizedEmail);
+    }
+    const { data: existing } = await query.maybeSingle();
+    if (existing) {
+      return NextResponse.json({ participant: existing, sessionStatus: session.status, resumed: true }, { status: 200 });
+    }
+  }
+
+  const avatar = randomAvatar();
+
   const { data: participant, error } = await supabaseAdmin
     .from("participants")
-    .insert({ session_id: params.id, name: finalName, avatar, language: languageCode })
+    .insert({
+      session_id: params.id,
+      name: trimmedName,
+      store: trimmedStore,
+      city: trimmedCity,
+      mobile: normalizedMobile,
+      email: normalizedEmail,
+      avatar,
+      language: languageCode
+    })
     .select()
     .single();
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // A unique-index race (two simultaneous submits with the same
+    // mobile/email) lands here — treat it the same as the resume path
+    // above rather than showing a raw DB error.
+    if (error.code === "23505") {
+      let query = supabaseAdmin.from("participants").select("*").eq("session_id", params.id);
+      query = normalizedMobile ? query.eq("mobile", normalizedMobile) : query.eq("email", normalizedEmail!);
+      const { data: existing } = await query.maybeSingle();
+      if (existing) return NextResponse.json({ participant: existing, sessionStatus: session.status, resumed: true }, { status: 200 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const { count } = await supabaseAdmin
     .from("participants")
@@ -46,5 +133,5 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   await broadcastSessionEvent(params.id, "answer_count", { joined: count ?? 0, type: "joined" });
 
-  return NextResponse.json({ participant, sessionStatus: session.status }, { status: 201 });
+  return NextResponse.json({ participant, sessionStatus: session.status, resumed: false }, { status: 201 });
 }

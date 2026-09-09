@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession, PublicQuestion } from "@/lib/types";
 import { translateQuestion } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
+import { broadcastSessionEvent } from "@/lib/realtime";
 
 function toPublicQuestion(session: LiveSession, index: number): PublicQuestion | null {
   const q = session.quiz_snapshot.questions[index];
@@ -11,6 +12,7 @@ function toPublicQuestion(session: LiveSession, index: number): PublicQuestion |
     index,
     question_text: q.question_text,
     image_url: q.image_url,
+    media_type: q.media_type ?? "image",
     option_a: q.option_a,
     option_b: q.option_b,
     option_c: q.option_c,
@@ -20,17 +22,18 @@ function toPublicQuestion(session: LiveSession, index: number): PublicQuestion |
   };
 }
 
-/**
- * Returns the question in the participant's chosen language. English
- * participants (and the presenter/admin/leaderboard screens, which never
- * pass a non-English language) skip this entirely. For anyone else, we
- * check the cache first — only the very first participant in a session to
- * request a given language for a given question triggers an AI call; every
- * participant after that reads the cached row.
- */
+/** Same caching behavior as before — translated once per (session,
+ *  question, language), reused for every participant who picks that
+ *  language. Media is never translated (nothing to translate about an
+ *  image/video), so media_type/image_url just pass through unchanged. */
 async function toLocalizedQuestion(session: LiveSession, index: number, language: string): Promise<PublicQuestion | null> {
   const base = toPublicQuestion(session, index);
-  if (!base || language === "en") return base;
+  // Hard backstop, independent of the join route's own check: even if a
+  // participant row somehow has a non-English language stored (e.g. the
+  // quiz's translation setting was switched off after they joined), this
+  // is what actually prevents any Claude API call — the real place the
+  // cost would be incurred.
+  if (!base || language === "en" || !session.quiz_snapshot.quiz.translation_enabled) return base;
 
   const { data: cached } = await supabaseAdmin
     .from("question_translations")
@@ -53,9 +56,6 @@ async function toLocalizedQuestion(session: LiveSession, index: number, language
       optionC: base.option_c,
       optionD: base.option_d
     });
-    // Best-effort cache write — if two participants race on the same
-    // first request, the unique constraint just makes the second insert a
-    // harmless no-op via upsert.
     await supabaseAdmin.from("question_translations").upsert(
       {
         session_id: session.id,
@@ -76,52 +76,84 @@ async function toLocalizedQuestion(session: LiveSession, index: number, language
   }
 }
 
+/**
+ * Self-healing auto-reveal: Vercel Cron can't tick sub-minute, so instead
+ * of depending on a background sweep, whichever request notices the
+ * current question's phase_deadline has passed flips it to 'revealed'
+ * right here. With the admin dashboard polling every 2.5s AND every
+ * participant polling every 2.5s, a passed deadline gets caught within a
+ * couple of seconds in practice — no cron needed. Returns the
+ * (possibly-updated) session.
+ */
+async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
+  if (session.phase !== "question" || !session.phase_deadline) return session;
+  if (new Date(session.phase_deadline).getTime() > Date.now()) return session;
+
+  const { data: updated } = await supabaseAdmin
+    .from("sessions")
+    .update({ phase: "revealed", phase_deadline: null })
+    .eq("id", session.id)
+    .eq("phase", "question") // guards against racing with a presenter's manual reveal click
+    .select()
+    .single<LiveSession>();
+
+  if (updated) {
+    await broadcastSessionEvent(session.id, "question_revealed", { questionIndex: session.current_question_index });
+    return updated;
+  }
+  return session;
+}
+
 // GET /api/sessions/:id/state?participantId=...
-// Without participantId → aggregate counters only (safe for admin dashboard
-// and the public leaderboard screen; no answer key, no participant names).
-// With participantId → that participant's next question / waiting / finished
-// state, and lazily starts their server-side per-question timer.
+// Without participantId → aggregate counters for the admin dashboard and
+// the public leaderboard screen (includes answered/pending for whichever
+// question is currently live).
+// With participantId → that one shared question (or the reveal, or
+// waiting/finished), same for everyone, plus this participant's own
+// answered/not-yet-answered status for it.
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const participantId = req.nextUrl.searchParams.get("participantId");
 
-  const { data: session, error } = await supabaseAdmin
+  const { data: rawSession, error } = await supabaseAdmin
     .from("sessions")
     .select("*")
     .eq("id", params.id)
     .single<LiveSession>();
-  if (error || !session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  if (error || !rawSession) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
+  const session = await selfHealPhase(rawSession);
   const totalQuestions = session.quiz_snapshot.questions.length;
 
   if (!participantId) {
-    const [{ count: joined }, { data: progressRows }, { count: completed }, { count: answeredTotal }] = await Promise.all([
+    const [{ count: joined }, { count: completed }, { count: answeredForCurrent }] = await Promise.all([
       supabaseAdmin.from("participants").select("*", { count: "exact", head: true }).eq("session_id", params.id),
-      supabaseAdmin.from("participants").select("current_question_index").eq("session_id", params.id).gt("current_question_index", 0),
+      supabaseAdmin.from("participants").select("*", { count: "exact", head: true }).eq("session_id", params.id).not("completed_at", "is", null),
       supabaseAdmin
-        .from("participants")
+        .from("answers")
         .select("*", { count: "exact", head: true })
         .eq("session_id", params.id)
-        .not("completed_at", "is", null),
-      supabaseAdmin.from("answers").select("*", { count: "exact", head: true }).eq("session_id", params.id)
+        .eq("question_index", session.current_question_index)
     ]);
 
-    const started = progressRows?.length ?? 0;
-    const avgQuestionIndex = started
-      ? Math.round((progressRows!.reduce((s, r) => s + r.current_question_index, 0) / started) * 10) / 10
-      : 0;
+    const joinedCount = joined ?? 0;
+    const answered = answeredForCurrent ?? 0;
 
     return NextResponse.json({
       status: session.status,
+      phase: session.phase,
       quizTitle: session.quiz_snapshot.quiz.title,
+      translationEnabled: session.quiz_snapshot.quiz.translation_enabled,
+      questionNumber: session.current_question_index + 1,
       totalQuestions,
-      timeLimitMinutes: session.quiz_snapshot.quiz.time_limit_minutes,
       startedAt: session.started_at,
+      phaseDeadline: session.phase_deadline,
       counts: {
-        joined: joined ?? 0,
-        started,
+        joined: joinedCount,
         completed: completed ?? 0,
-        answersReceived: answeredTotal ?? 0,
-        avgQuestionIndex
+        // Answered/pending for the CURRENT question specifically — this is
+        // what shows as two large numbers on the presenter's live view.
+        answered,
+        pending: Math.max(0, joinedCount - answered)
       }
     });
   }
@@ -135,24 +167,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (pError || !participant) return NextResponse.json({ error: "Participant not found" }, { status: 404 });
 
   if (session.status !== "live") {
+    // Distinguishes "never started yet" from "ended early by the presenter
+    // before naturally finishing" — same distinction the client already
+    // relied on before this migration (status='finished' + phase !==
+    // 'finished' means an early cutoff, not a completed run).
+    if (session.status === "finished" && session.phase !== "finished") {
+      return NextResponse.json({ status: "finished", phase: "ended" });
+    }
     return NextResponse.json({ status: session.status, phase: "waiting" });
   }
 
-  // Enforce the total quiz timer (spec §24): once time is up, no more
-  // answers, regardless of what question the participant is on.
-  const deadline = session.started_at
-    ? new Date(session.started_at).getTime() + session.quiz_snapshot.quiz.time_limit_minutes * 60_000
-    : null;
-  const timeExpired = deadline !== null && Date.now() > deadline;
-
-  if (timeExpired && !participant.completed_at) {
-    await supabaseAdmin
-      .from("participants")
-      .update({ completed_at: new Date().toISOString() })
-      .eq("id", participant.id);
-  }
-
-  if (timeExpired || participant.completed_at || participant.current_question_index >= totalQuestions) {
+  if (session.phase === "finished") {
     return NextResponse.json({
       status: "live",
       phase: "finished",
@@ -161,36 +186,80 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
   }
 
-  // Lazily start this participant's per-question timer the first time they
-  // fetch the question — this timestamp is what scoring is measured against.
-  if (!participant.current_question_started_at) {
-    const startedAt = new Date().toISOString();
-    await supabaseAdmin
-      .from("participants")
-      .update({ current_question_started_at: startedAt })
-      .eq("id", participant.id);
-    participant.current_question_started_at = startedAt;
-  }
+  const index = session.current_question_index;
+  const language = participant.language ?? "en";
 
-  const { count: answeredSoFar } = await supabaseAdmin
+  const { count: answeredForCurrent } = await supabaseAdmin
     .from("answers")
     .select("*", { count: "exact", head: true })
     .eq("session_id", params.id)
-    .eq("question_index", participant.current_question_index);
+    .eq("question_index", index);
+  const answeredSoFar = answeredForCurrent ?? 0;
 
-  const question = await toLocalizedQuestion(session, participant.current_question_index, participant.language ?? "en");
+  if (session.phase === "question") {
+    const { data: ownAnswer } = await supabaseAdmin
+      .from("answers")
+      .select("id")
+      .eq("session_id", params.id)
+      .eq("participant_id", participantId)
+      .eq("question_index", index)
+      .maybeSingle();
+
+    if (ownAnswer) {
+      // Already answered this one — waiting for the presenter (or the
+      // timer) to reveal, same as everyone else who's answered.
+      return NextResponse.json({
+        status: "live",
+        phase: "locked",
+        questionNumber: index + 1,
+        totalQuestions,
+        answeredSoFar
+      });
+    }
+
+    const question = await toLocalizedQuestion(session, index, language);
+    return NextResponse.json({
+      status: "live",
+      phase: "question",
+      question,
+      questionNumber: index + 1,
+      totalQuestions,
+      questionStartedAt: session.current_question_started_at,
+      speedBonusEnabled: session.quiz_snapshot.quiz.scoring_mode === "speed_bonus",
+      speedBonusWindowSeconds: session.quiz_snapshot.quiz.speed_bonus_window_seconds,
+      questionTimerSeconds: session.quiz_snapshot.quiz.question_timer_seconds ?? 20,
+      answeredSoFar,
+      deadline: session.phase_deadline ? new Date(session.phase_deadline).getTime() : null
+    });
+  }
+
+  // phase === 'revealed'
+  const rawQuestion = session.quiz_snapshot.questions[index];
+  const question = await toLocalizedQuestion(session, index, language);
+
+  const { data: ownAnswer } = await supabaseAdmin
+    .from("answers")
+    .select("selected_option, is_correct, question_score")
+    .eq("session_id", params.id)
+    .eq("participant_id", participantId)
+    .eq("question_index", index)
+    .maybeSingle();
+
+  const wrongFeedbackField = ownAnswer
+    ? (`wrong_feedback_${ownAnswer.selected_option.toLowerCase()}` as "wrong_feedback_a" | "wrong_feedback_b" | "wrong_feedback_c" | "wrong_feedback_d")
+    : null;
 
   return NextResponse.json({
     status: "live",
-    phase: "question",
+    phase: "revealed",
     question,
-    questionNumber: participant.current_question_index + 1,
+    questionNumber: index + 1,
     totalQuestions,
-    questionStartedAt: participant.current_question_started_at,
-    speedBonusEnabled: session.quiz_snapshot.quiz.scoring_mode === "speed_bonus",
-    speedBonusWindowSeconds: session.quiz_snapshot.quiz.speed_bonus_window_seconds,
-    afterAnswerMode: session.quiz_snapshot.quiz.after_answer_mode,
-    answeredSoFar: answeredSoFar ?? 0,
-    deadline
+    correctOption: rawQuestion.correct_option,
+    explanation: rawQuestion.explanation,
+    yourAnswer: ownAnswer?.selected_option ?? null,
+    isCorrect: ownAnswer?.is_correct ?? null,
+    yourWrongFeedback: ownAnswer && !ownAnswer.is_correct && wrongFeedbackField ? rawQuestion[wrongFeedbackField] : null,
+    answeredSoFar
   });
 }

@@ -18,7 +18,8 @@ const config: Config = {
       fontFamily: {
         display: ["var(--font-fraunces)", "serif"],
         body: ["var(--font-manrope)", "sans-serif"],
-        dial: ["var(--font-spacegrotesk)", "monospace"]
+        dial: ["var(--font-spacegrotesk)", "monospace"],
+        wordmark: ["var(--font-italiana)", "serif"]
       },
       boxShadow: {
         none: "none"

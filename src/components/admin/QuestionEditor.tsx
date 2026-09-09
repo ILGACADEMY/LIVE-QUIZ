@@ -7,6 +7,7 @@ export interface EditableQuestion {
   id?: string;
   question_text: string;
   image_url: string | null;
+  media_type: "image" | "video"; // NEW — defaults to 'image' for existing rows via migration
   option_a: string;
   option_b: string;
   option_c: string;
@@ -26,6 +27,7 @@ export function blankQuestion(): EditableQuestion {
   return {
     question_text: "",
     image_url: null,
+    media_type: "image",
     option_a: "",
     option_b: "",
     option_c: "",
@@ -69,6 +71,7 @@ export default function QuestionEditor({
   onMoveDown: () => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof EditableQuestion>(key: K, value: EditableQuestion[K]) {
@@ -77,13 +80,28 @@ export default function QuestionEditor({
 
   async function handleUpload(file: File) {
     setUploading(true);
-    const form = new FormData();
-    form.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: form });
-    setUploading(false);
-    if (res.ok) {
-      const { url } = await res.json();
-      set("image_url", url);
+    setUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: form });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // This is the fix: previously a failed upload just silently reset
+        // the button with no explanation at all. Now you'll actually see
+        // why — expired admin session, unsupported file type, or file
+        // too large are the three causes the route can report.
+        setUploadError(data.error ?? "Upload failed for an unknown reason.");
+        return;
+      }
+
+      set("image_url", data.url);
+      set("media_type", data.mediaType ?? "image");
+    } catch {
+      setUploadError("Network error — the upload never reached the server. Check your connection and try again.");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -118,27 +136,46 @@ export default function QuestionEditor({
         placeholder="e.g. Which material is used for the VR34B's caseback gasket?"
       />
 
-      <label className="field-label block mb-2">Image (optional)</label>
-      <div className="flex items-center gap-4 mb-5">
-        {question.image_url && (
+      <label className="field-label block mb-2">Image or video (optional)</label>
+      <div className="flex items-center gap-4 mb-2">
+        {question.image_url && question.media_type === "video" ? (
+          <video
+            src={question.image_url}
+            controls
+            className="w-32 h-20 object-cover border border-hairline bg-black"
+          />
+        ) : question.image_url ? (
           <img src={question.image_url} alt="" className="w-20 h-20 object-cover border border-hairline" />
-        )}
+        ) : null}
         <input
           ref={fileInput}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
           className="hidden"
           onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
         />
         <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
-          {uploading ? "Uploading…" : question.image_url ? "Replace image" : "+ Upload image"}
+          {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
         </button>
         {question.image_url && (
-          <button type="button" onClick={() => set("image_url", null)} className="text-xs text-crimson/80 hover:text-crimson">
+          <button
+            type="button"
+            onClick={() => {
+              set("image_url", null);
+              set("media_type", "image");
+            }}
+            className="text-xs text-crimson/80 hover:text-crimson"
+          >
             Remove
           </button>
         )}
       </div>
+      {uploadError && (
+        <p className="text-xs text-crimson mb-3">{uploadError}</p>
+      )}
+      <p className="text-xs text-parchment/50 mb-5">
+        Images up to 5MB (JPG/PNG/WEBP). Videos up to 50MB (MP4/WEBM/MOV) — plays with sound on the participant's device, same as any video player.
+      </p>
 
       <div className="grid md:grid-cols-2 gap-4 mb-5">
         {OPTIONS.map(({ key, field }) => (

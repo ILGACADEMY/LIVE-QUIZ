@@ -23,8 +23,10 @@ create table if not exists quizzes (
   scoring_mode              text not null default 'speed_bonus'
                               check (scoring_mode in ('standard', 'speed_bonus')),
   speed_bonus_window_seconds int not null default 20,
+  question_timer_seconds    int  not null default 20, -- how long each question stays open in a LIVE session (all scoring modes) before auto-reveal
+  translation_enabled       boolean not null default false, -- OFF by default: AI translation costs money per question per language, so it only runs for quizzes that explicitly opt in
   after_answer_mode         text not null default 'auto_advance'
-                              check (after_answer_mode in ('auto_advance', 'next_button')),
+                              check (after_answer_mode in ('auto_advance', 'next_button')), -- used by Preview only; a live session is always presenter-controlled
   status                    text not null default 'draft'
                               check (status in ('draft', 'published')),
   created_at                timestamptz not null default now(),
@@ -37,6 +39,7 @@ create table if not exists questions (
   order_index           int not null,
   question_text         text not null,
   image_url             text,
+  media_type            text not null default 'image' check (media_type in ('image', 'video')),
   option_a              text not null,
   option_b              text not null,
   option_c              text not null,
@@ -61,24 +64,42 @@ create table if not exists questions (
 -- editing the template later never changes a running/finished session.
 -- ---------------------------------------------------------------------------
 create table if not exists sessions (
-  id                        uuid primary key default gen_random_uuid(),
-  quiz_id                   uuid not null references quizzes(id) on delete cascade,
-  quiz_snapshot             jsonb not null,
-  status                    text not null default 'waiting'
-                              check (status in ('waiting', 'live', 'finished')),
-  created_at                timestamptz not null default now(),
-  started_at                timestamptz,
-  ended_at                  timestamptz,
-  delete_at                 timestamptz not null default (now() + interval '24 hours')
+  id                            uuid primary key default gen_random_uuid(),
+  quiz_id                       uuid not null references quizzes(id) on delete cascade,
+  quiz_snapshot                 jsonb not null,
+  status                        text not null default 'waiting'
+                                  check (status in ('waiting', 'live', 'finished')),
+  -- Presenter-controlled, synchronized session mechanics: ONE question is
+  -- live for every participant at once, tracked here rather than on each
+  -- participant's own row. `phase` governs where that shared question is
+  -- in its lifecycle; `phase_deadline` is when it auto-reveals if the
+  -- presenter hasn't clicked "Reveal answer" first.
+  current_question_index       int not null default 0,
+  current_question_started_at  timestamptz,
+  phase                         text not null default 'waiting'
+                                  check (phase in ('waiting', 'question', 'revealed', 'finished')),
+  phase_deadline                timestamptz,
+  created_at                    timestamptz not null default now(),
+  started_at                    timestamptz,
+  ended_at                      timestamptz,
+  delete_at                     timestamptz not null default (now() + interval '24 hours')
 );
 
 create table if not exists participants (
   id                          uuid primary key default gen_random_uuid(),
   session_id                  uuid not null references sessions(id) on delete cascade,
   name                        text not null,
+  store                       text, -- required at the API layer on join
+  city                        text, -- required at the API layer on join
+  mobile                      text, -- normalized (digits + optional leading +); at least one of mobile/email required at the API layer
+  email                       text, -- normalized (trimmed, lowercased); at least one of mobile/email required at the API layer
   avatar                      text not null default '🦉',
   language                    text not null default 'en',
   joined_at                   timestamptz not null default now(),
+  -- current_question_index / current_question_started_at below are no
+  -- longer read for pacing (sessions.current_question_index above is now
+  -- the single source of truth for what's live) — kept only so existing
+  -- rows/deployments aren't broken by a dropped column.
   current_question_index      int not null default 0,
   current_question_started_at timestamptz,
   base_score                  int not null default 0,
@@ -106,6 +127,13 @@ create table if not exists answers (
 create index if not exists idx_questions_quiz on questions(quiz_id);
 create index if not exists idx_sessions_quiz on sessions(quiz_id);
 create index if not exists idx_participants_session on participants(session_id);
+-- Duplicate-attempt prevention: at most one participant row per session per
+-- mobile number / email address. The join route checks for an existing
+-- match first and resumes that participant rather than erroring — these
+-- indexes are the hard DB-level backstop against a race (two submits at
+-- once) rather than the primary mechanism.
+create unique index if not exists idx_participants_session_mobile on participants(session_id, mobile) where mobile is not null;
+create unique index if not exists idx_participants_session_email on participants(session_id, email) where email is not null;
 create index if not exists idx_answers_session on answers(session_id);
 create index if not exists idx_answers_participant on answers(participant_id);
 create index if not exists idx_sessions_delete_at on sessions(delete_at);

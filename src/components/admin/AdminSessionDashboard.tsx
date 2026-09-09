@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
 interface AdminLeaderboardRow {
   rank: number;
   name: string;
+  store: string | null;
+  city: string | null;
   totalScore: number;
   baseScore: number;
   speedBonus: number;
@@ -16,11 +19,13 @@ interface AdminLeaderboardRow {
 
 interface StateResponse {
   status: "waiting" | "live" | "finished";
+  phase: "waiting" | "question" | "revealed" | "finished";
   quizTitle: string;
+  questionNumber: number;
   totalQuestions: number;
-  timeLimitMinutes: number;
   startedAt: string | null;
-  counts: { joined: number; started: number; completed: number; answersReceived: number; avgQuestionIndex: number };
+  phaseDeadline: string | null;
+  counts: { joined: number; completed: number; answered: number; pending: number };
 }
 
 export default function AdminSessionDashboard({ sessionId }: { sessionId: string }) {
@@ -29,6 +34,10 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [busy, setBusy] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
   const [fullLeaderboard, setFullLeaderboard] = useState<AdminLeaderboardRow[] | null>(null);
+  const [filterOptions, setFilterOptions] = useState<{ stores: string[]; cities: string[] }>({ stores: [], cities: [] });
+  const [nameSearch, setNameSearch] = useState("");
+  const [storeFilter, setStoreFilter] = useState("");
+  const [cityFilter, setCityFilter] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
@@ -40,7 +49,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   useEffect(() => {
     setJoinUrl(`${window.location.origin}/join/${sessionId}`);
     poll();
-    const interval = setInterval(poll, 2500);
+    const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
   }, [poll, sessionId]);
 
@@ -48,6 +57,9 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
     const channel = supabaseBrowser
       .channel(`session:${sessionId}`)
       .on("broadcast", { event: "answer_count" }, () => poll())
+      .on("broadcast", { event: "question_revealed" }, () => poll())
+      .on("broadcast", { event: "question_advanced" }, () => poll())
+      .on("broadcast", { event: "quiz_ended" }, () => poll())
       .subscribe();
     return () => {
       supabaseBrowser.removeChannel(channel);
@@ -60,6 +72,17 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
     setBusy(false);
     poll();
   }
+
+  // The single presenter control that either reveals the current
+  // question or advances to the next one, depending on phase — see
+  // /api/sessions/:id/advance for the exact rule.
+  async function advance() {
+    setBusy(true);
+    await fetch(`/api/sessions/${sessionId}/advance`, { method: "POST" });
+    setBusy(false);
+    poll();
+  }
+
   async function endQuiz() {
     if (!confirm("End this quiz for everyone? Participants mid-question will be cut off.")) return;
     setBusy(true);
@@ -75,13 +98,31 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   }
 
   const loadFullLeaderboard = useCallback(async () => {
-    const res = await fetch(`/api/sessions/${sessionId}/leaderboard?admin=1`);
-    if (res.ok) setFullLeaderboard((await res.json()).leaderboard);
-  }, [sessionId]);
+    const query = new URLSearchParams({ admin: "1" });
+    if (storeFilter) query.set("store", storeFilter);
+    if (cityFilter) query.set("city", cityFilter);
+    const res = await fetch(`/api/sessions/${sessionId}/leaderboard?${query.toString()}`);
+    if (res.ok) {
+      const data = await res.json();
+      setFullLeaderboard(data.leaderboard);
+      setFilterOptions(data.filters ?? { stores: [], cities: [] });
+    }
+  }, [sessionId, storeFilter, cityFilter]);
 
   useEffect(() => {
     if (state?.status === "finished") loadFullLeaderboard();
   }, [state?.status, loadFullLeaderboard]);
+
+  // Admin already has full access to every row here — the name search is
+  // a plain client-side filter over that, no privacy boundary to worry
+  // about (unlike the public leaderboard's search, which only ever
+  // touches the Top 10 it already fetched).
+  const visibleLeaderboard = useMemo(() => {
+    if (!fullLeaderboard) return null;
+    if (!nameSearch.trim()) return fullLeaderboard;
+    const q = nameSearch.trim().toLowerCase();
+    return fullLeaderboard.filter((r) => r.name.toLowerCase().includes(q));
+  }, [fullLeaderboard, nameSearch]);
 
   async function generateAnalysis() {
     setAnalysisLoading(true);
@@ -96,6 +137,17 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
   if (!state) return <main className="min-h-screen px-6 py-10 text-parchment/50">Loading session…</main>;
 
+  const phaseLabel =
+    state.status === "waiting"
+      ? "WAITING TO START"
+      : state.status === "finished"
+      ? "FINISHED"
+      : state.phase === "question"
+      ? "QUESTION LIVE"
+      : state.phase === "revealed"
+      ? "ANSWER REVEALED"
+      : "LIVE";
+
   return (
     <main className="min-h-screen px-6 py-10 md:px-12">
       <div className="max-w-4xl mx-auto">
@@ -105,9 +157,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
-            <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-2">
-              {state.status === "waiting" ? "WAITING TO START" : state.status === "live" ? "LIVE" : "FINISHED"}
-            </p>
+            <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-2">{phaseLabel}</p>
             <h1 className="font-display italic text-3xl">{state.quizTitle}</h1>
             <p className="text-parchment/40 text-xs mt-2 font-dial">Session {sessionId}</p>
           </div>
@@ -115,6 +165,11 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             {state.status === "waiting" && (
               <button onClick={start} disabled={busy || state.counts.joined === 0} className="btn-gold">
                 Start quiz
+              </button>
+            )}
+            {state.status === "live" && (
+              <button onClick={advance} disabled={busy} className="btn-gold">
+                {state.phase === "question" ? "Reveal answer" : "Next question"}
               </button>
             )}
             {state.status === "live" && (
@@ -137,7 +192,8 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
               <QRCodeSVG value={joinUrl} size={200} bgColor="#F3EDE1" fgColor="#12100D" />
             </div>
             <div>
-              <p className="font-display italic text-2xl mb-2">Scan to join</p>
+              <MeridianWordmark size="small" />
+              <p className="font-display italic text-2xl mt-4 mb-2">Scan to join</p>
               <p className="text-parchment/50 text-sm break-all mb-1">{joinUrl}</p>
               <p className="text-parchment/40 text-xs">No app, account, or password needed.</p>
             </div>
@@ -146,33 +202,32 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Stat label="Joined" value={state.counts.joined} />
-          <Stat label="In progress" value={state.counts.started} />
           <Stat label="Completed" value={state.counts.completed} />
-          <Stat label="Answers received" value={state.counts.answersReceived} />
+          {/* Answered/pending are scoped to whichever question is
+              currently live — the two large numbers the presenter watches
+              fill up in real time while a question is active. */}
+          <Stat label="Answered" value={state.counts.answered} highlight={state.status === "live" && state.phase === "question"} />
+          <Stat label="Pending" value={state.counts.pending} />
         </div>
 
         <div className="case-panel p-6 grid grid-cols-2 md:grid-cols-3 gap-6 text-sm">
           <div>
-            <p className="field-label mb-1">Total questions</p>
-            <p className="font-dial text-lg">{state.totalQuestions}</p>
-          </div>
-          <div>
-            <p className="field-label mb-1">Time limit</p>
-            <p className="font-dial text-lg">{state.timeLimitMinutes} min</p>
-          </div>
-          <div>
-            <p className="field-label mb-1">Average progress</p>
+            <p className="field-label mb-1">Question</p>
             <p className="font-dial text-lg">
-              Q{Math.min(Math.ceil(state.counts.avgQuestionIndex), state.totalQuestions)} of {state.totalQuestions}
+              {state.status === "waiting" ? "—" : `${state.questionNumber} of ${state.totalQuestions}`}
             </p>
+          </div>
+          <div>
+            <p className="field-label mb-1">Phase</p>
+            <p className="font-dial text-lg capitalize">{state.status === "waiting" ? "Not started" : state.phase}</p>
           </div>
         </div>
 
         {state.status === "finished" && (
           <>
-            <div className="flex items-center justify-between mt-10 mb-4">
+            <div className="flex items-center justify-between mt-10 mb-4 flex-wrap gap-3">
               <p className="field-label">Full ranking (private — admin only)</p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <a href={`/api/sessions/${sessionId}/export?type=leaderboard`} className="btn-ghost text-sm px-4 py-2">
                   Download leaderboard (CSV)
                 </a>
@@ -185,28 +240,67 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-3 mb-4">
+              <input
+                value={nameSearch}
+                onChange={(e) => setNameSearch(e.target.value)}
+                placeholder="Search by name…"
+                className="field-input max-w-[200px] text-sm"
+              />
+              <select value={storeFilter} onChange={(e) => setStoreFilter(e.target.value)} className="field-input max-w-[200px] text-sm">
+                <option value="">All stores</option>
+                {filterOptions.stores.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} className="field-input max-w-[200px] text-sm">
+                <option value="">All cities</option>
+                {filterOptions.cities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+              {(nameSearch || storeFilter || cityFilter) && (
+                <button
+                  onClick={() => {
+                    setNameSearch("");
+                    setStoreFilter("");
+                    setCityFilter("");
+                  }}
+                  className="btn-ghost text-sm px-4"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
             {analysis && <div className="case-panel p-6 mb-6 text-sm text-parchment/70 leading-relaxed">{analysis}</div>}
 
-            {fullLeaderboard && (
+            {visibleLeaderboard && (
               <div className="case-panel divide-y divide-hairline">
-                <div className="grid grid-cols-5 gap-2 px-5 py-3 text-xs text-parchment/40">
+                <div className="grid grid-cols-6 gap-2 px-5 py-3 text-xs text-parchment/40">
                   <span>Rank</span>
                   <span className="col-span-2">Name</span>
+                  <span>Store / City</span>
                   <span>Base / Speed</span>
                   <span className="text-right">Total</span>
                 </div>
-                {fullLeaderboard.map((r) => (
-                  <div key={r.rank} className="grid grid-cols-5 gap-2 px-5 py-3 text-sm items-center">
+                {visibleLeaderboard.map((r) => (
+                  <div key={r.rank} className="grid grid-cols-6 gap-2 px-5 py-3 text-sm items-center">
                     <span className="font-dial">{r.rank}</span>
                     <span className="col-span-2">{r.name}</span>
+                    <span className="text-parchment/50 text-xs">{[r.store, r.city].filter(Boolean).join(" — ") || "—"}</span>
                     <span className="text-parchment/50 text-xs">
                       {r.baseScore} / {r.speedBonus}
                     </span>
                     <span className="text-right font-dial text-gold">{r.totalScore}</span>
                   </div>
                 ))}
-                {fullLeaderboard.length === 0 && (
-                  <p className="px-5 py-8 text-center text-parchment/40 text-sm">No one finished this session.</p>
+                {visibleLeaderboard.length === 0 && (
+                  <p className="px-5 py-8 text-center text-parchment/40 text-sm">No matching participants.</p>
                 )}
               </div>
             )}
@@ -217,11 +311,11 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
     <div className="case-panel p-5">
       <p className="field-label mb-2">{label}</p>
-      <p className="font-dial text-3xl text-gold">{value}</p>
+      <p className={`font-dial text-3xl ${highlight ? "text-gold" : ""}`}>{value}</p>
     </div>
   );
 }

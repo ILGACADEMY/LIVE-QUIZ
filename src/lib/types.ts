@@ -2,6 +2,7 @@ export type ScoringMode = "standard" | "speed_bonus";
 export type AfterAnswerMode = "auto_advance" | "next_button";
 export type QuizStatus = "draft" | "published";
 export type SessionStatus = "waiting" | "live" | "finished";
+export type SessionPhase = "waiting" | "question" | "revealed" | "finished";
 export type OptionKey = "A" | "B" | "C" | "D";
 export type Difficulty = "easy" | "medium" | "hard";
 
@@ -18,7 +19,9 @@ export interface Quiz {
   back_navigation_enabled: boolean;
   scoring_mode: ScoringMode;
   speed_bonus_window_seconds: number;
-  after_answer_mode: AfterAnswerMode;
+  question_timer_seconds: number; // per-question active window, all scoring modes
+  translation_enabled: boolean; // OFF by default — AI translation costs money per question per language, so it only runs when a quiz explicitly opts in
+  after_answer_mode: AfterAnswerMode; // NOTE: no longer used for pacing — see README note in migration 002 patch guide. Kept on the type/schema so existing builder UI doesn't break; presenter always controls advancement now regardless of this setting.
   status: QuizStatus;
   created_at: string;
   updated_at: string;
@@ -30,6 +33,7 @@ export interface Question {
   order_index: number;
   question_text: string;
   image_url: string | null;
+  media_type: "image" | "video";
   option_a: string;
   option_b: string;
   option_c: string;
@@ -50,6 +54,7 @@ export interface PublicQuestion {
   index: number;
   question_text: string;
   image_url: string | null;
+  media_type: "image" | "video";
   option_a: string;
   option_b: string;
   option_c: string;
@@ -68,6 +73,10 @@ export interface LiveSession {
   quiz_id: string;
   quiz_snapshot: QuizSnapshot;
   status: SessionStatus;
+  current_question_index: number; // NEW — session-level, the single question live for everyone
+  current_question_started_at: string | null; // NEW
+  phase: SessionPhase; // NEW
+  phase_deadline: string | null; // NEW — when the current question auto-reveals
   created_at: string;
   started_at: string | null;
   ended_at: string | null;
@@ -81,8 +90,17 @@ export interface Participant {
   avatar: string;
   language: string;
   joined_at: string;
-  current_question_index: number;
-  current_question_started_at: string | null;
+  store: string | null;
+  city: string | null;
+  mobile: string | null;
+  email: string | null;
+  // current_question_index / current_question_started_at still exist in the
+  // DB (migration 002 doesn't drop them) but are no longer read for
+  // pacing — sessions.current_question_index is now the single source of
+  // truth for what question is live. Left here as optional/legacy so any
+  // remaining reads don't break; don't write to them going forward.
+  current_question_index?: number;
+  current_question_started_at?: string | null;
   base_score: number;
   speed_score: number;
   total_score: number;

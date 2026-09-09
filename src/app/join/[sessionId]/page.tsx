@@ -4,33 +4,75 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SUPPORTED_LANGUAGES, detectSupportedLanguage } from "@/lib/languages";
 import { AVATARS, randomAvatar } from "@/lib/avatars";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
 export default function JoinPage({ params }: { params: { sessionId: string } }) {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [store, setStore] = useState("");
+  const [city, setCity] = useState("");
+  const [mobile, setMobile] = useState("");
+  const [email, setEmail] = useState("");
   const [avatar, setAvatar] = useState(AVATARS[0]);
   const [language, setLanguage] = useState("en");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [quizTitle, setQuizTitle] = useState<string | null>(null);
+  const [translationEnabled, setTranslationEnabled] = useState(false);
+  const [joinedCount, setJoinedCount] = useState<number | null>(null);
 
   useEffect(() => {
     setAvatar(randomAvatar());
     if (typeof navigator !== "undefined") setLanguage(detectSupportedLanguage(navigator.language));
     fetch(`/api/sessions/${params.sessionId}/state`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => setQuizTitle(data.quizTitle))
+      .then((data) => {
+        setQuizTitle(data.quizTitle);
+        setTranslationEnabled(Boolean(data.translationEnabled));
+        setJoinedCount(data.counts?.joined ?? 0);
+      })
       .catch(() => setError("This quiz session was not found or has ended."));
+  }, [params.sessionId]);
+
+  // Live join count — updates the moment anyone (including you, once you
+  // submit) joins, via the same broadcast the join API route sends.
+  useEffect(() => {
+    const channel = supabaseBrowser
+      .channel(`session:${params.sessionId}`)
+      .on("broadcast", { event: "answer_count" }, (msg) => {
+        const payload = msg.payload as { type?: string; joined?: number };
+        if (payload.type === "joined" && typeof payload.joined === "number") {
+          setJoinedCount(payload.joined);
+        }
+      })
+      .subscribe();
+    return () => {
+      supabaseBrowser.removeChannel(channel);
+    };
   }, [params.sessionId]);
 
   async function handleJoin(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+
+    if (!name.trim()) return setError("Please enter your name.");
+    if (!store.trim()) return setError("Please enter your store.");
+    if (!city.trim()) return setError("Please enter your city.");
+    if (!mobile.trim() && !email.trim()) return setError("Please enter your mobile number or email address.");
+
+    setLoading(true);
     const res = await fetch(`/api/sessions/${params.sessionId}/join`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name.trim(), language })
+      body: JSON.stringify({
+        name: name.trim(),
+        store: store.trim(),
+        city: city.trim(),
+        mobile: mobile.trim(),
+        email: email.trim(),
+        language
+      })
     });
     setLoading(false);
     const data = await res.json().catch(() => ({}));
@@ -64,43 +106,70 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
       </div>
 
       <div className="relative z-10 w-full max-w-sm text-center">
-        <p className="text-gold text-xs tracking-[0.35em] font-body font-medium mb-3">ILG ACADEMY</p>
-        <h1 className="font-display italic text-4xl md:text-5xl leading-tight mb-1">Horology Lab</h1>
-        <div className="w-10 h-px bg-gold/50 mx-auto my-5" />
-        {quizTitle && <p className="text-parchment/60 text-sm mb-10">{quizTitle}</p>}
-        {!quizTitle && !error && <p className="text-parchment/40 text-sm mb-10">Loading session…</p>}
+        <p className="text-parchment/40 text-xs tracking-[0.35em] font-body font-medium mb-4">ILG ACADEMY PRESENTS</p>
+        <MeridianWordmark />
+        <div className="w-10 h-px bg-gold/50 mx-auto my-6" />
+        {quizTitle && <p className="text-parchment/60 text-sm mb-2">{quizTitle}</p>}
+        {!quizTitle && !error && <p className="text-parchment/40 text-sm mb-2">Loading session…</p>}
+        {joinedCount !== null && (
+          <p className="text-gold/70 text-xs font-dial tracking-wide mb-8">
+            {joinedCount} {joinedCount === 1 ? "person has" : "people have"} joined
+          </p>
+        )}
 
         <form onSubmit={handleJoin} className="case-panel p-8 text-left">
-          <div className="flex items-center justify-center mb-6">
+          <div className="flex flex-col items-center mb-6">
             <button
               type="button"
               onClick={() => setAvatar(randomAvatar())}
               className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline hover:border-gold transition-colors"
-              title="Tap to change your avatar"
+              title="Tap to change your icon"
             >
               {avatar}
             </button>
+            <p className="text-parchment/30 text-xs mt-2">Tap to change your icon</p>
           </div>
 
-          <label className="field-label block mb-2">Your name (optional)</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            autoFocus
-            maxLength={60}
-            className="field-input mb-1"
-            placeholder="Leave blank to join as a guest"
-          />
-          <p className="text-parchment/30 text-xs mb-5">No name? We'll give you a fun one.</p>
+          <label className="field-label block mb-2">Your name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} autoFocus required maxLength={60} className="field-input mb-5" placeholder="Required" />
 
-          <label className="field-label block mb-2">Quiz language</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="field-input mb-6">
-            {SUPPORTED_LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.nativeLabel}
-              </option>
-            ))}
-          </select>
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div>
+              <label className="field-label block mb-2">Store</label>
+              <input value={store} onChange={(e) => setStore(e.target.value)} required maxLength={100} className="field-input" placeholder="e.g. Dubai Mall" />
+            </div>
+            <div>
+              <label className="field-label block mb-2">City</label>
+              <input value={city} onChange={(e) => setCity(e.target.value)} required maxLength={100} className="field-input" placeholder="e.g. Dubai" />
+            </div>
+          </div>
+
+          <label className="field-label block mb-2">Mobile number</label>
+          <input
+            value={mobile}
+            onChange={(e) => setMobile(e.target.value)}
+            type="tel"
+            className="field-input mb-1"
+            placeholder="e.g. +971 50 123 4567"
+          />
+          <p className="text-parchment/30 text-xs mb-5">Or leave blank and use email below instead.</p>
+
+          <label className="field-label block mb-2">Email</label>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="field-input mb-1" placeholder="you@example.com" />
+          <p className="text-parchment/30 text-xs mb-5">At least one of mobile or email is required — this is what stops the same person joining twice.</p>
+
+          {translationEnabled && (
+            <>
+              <label className="field-label block mb-2">Quiz language</label>
+              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="field-input mb-6">
+                {SUPPORTED_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>
+                    {l.nativeLabel}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
 
           {error && <p className="text-crimson text-sm mb-4">{error}</p>}
 
