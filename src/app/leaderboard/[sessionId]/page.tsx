@@ -88,32 +88,30 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
       )}
       {view !== "top10" && <p className="text-parchment/40 text-sm mb-8">Which {view === "byCity" ? "city" : "store"} is leading</p>}
 
-      {/* View toggle — By City / By Store only appear when there's more
-          than one distinct value, since ranking a single city against
-          itself isn't meaningful. */}
+      {/* All three tabs always shown, regardless of how many distinct
+          cities/stores exist yet — a single-city session just shows a
+          one-row ranking for that tab, which is still correct, and
+          having tabs appear/disappear based on data would be more
+          confusing than a short list. */}
       <div className="flex gap-2 mb-8">
         <button
           onClick={() => setView("top10")}
           className={`px-5 py-2 text-sm border transition-colors ${view === "top10" ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"}`}
         >
-          Top 10
+          Top 10 Name
         </button>
-        {cities.length > 1 && (
-          <button
-            onClick={() => setView("byCity")}
-            className={`px-5 py-2 text-sm border transition-colors ${view === "byCity" ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"}`}
-          >
-            By City
-          </button>
-        )}
-        {stores.length > 1 && (
-          <button
-            onClick={() => setView("byStore")}
-            className={`px-5 py-2 text-sm border transition-colors ${view === "byStore" ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"}`}
-          >
-            By Store
-          </button>
-        )}
+        <button
+          onClick={() => setView("byCity")}
+          className={`px-5 py-2 text-sm border transition-colors ${view === "byCity" ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"}`}
+        >
+          Top 10 City
+        </button>
+        <button
+          onClick={() => setView("byStore")}
+          className={`px-5 py-2 text-sm border transition-colors ${view === "byStore" ? "bg-gold text-charcoal border-gold" : "border-hairline hover:border-gold/50"}`}
+        >
+          Top 10 Store
+        </button>
       </div>
 
       {view === "top10" && (
