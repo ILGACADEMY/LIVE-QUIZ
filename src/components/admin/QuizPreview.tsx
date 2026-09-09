@@ -93,11 +93,31 @@ export default function QuizPreview({ quizId }: { quizId: string }) {
   return (
     <main className="min-h-screen px-6 py-10 flex flex-col items-center">
       <div className="w-full max-w-lg">
-        <div className="flex items-center justify-between mb-6">
-          <p className="text-parchment/50 text-sm">
-            Preview — Question {index + 1} of {questions.length}
-          </p>
-          <button onClick={() => router.push(`/admin/quizzes/${quizId}/edit`)} className="text-parchment/50 text-sm hover:text-gold">
+        <div className="flex items-center justify-between mb-6 gap-4">
+          <div className="flex items-center gap-3">
+            <p className="text-parchment/50 text-sm whitespace-nowrap">
+              Preview — Question {index + 1} of {questions.length}
+            </p>
+            <select
+              value={index}
+              onChange={(e) => {
+                setIndex(Number(e.target.value));
+                setSelected(null);
+                setLocked(false);
+                setLastResult(null);
+              }}
+              className="field-input text-sm py-1.5 px-2 w-auto"
+              title="Jump to a specific question"
+            >
+              {questions.map((question, i) => (
+                <option key={question.id ?? i} value={i}>
+                  Q{i + 1}: {(question.question_text || "(Untitled)").slice(0, 40)}
+                  {question.question_text && question.question_text.length > 40 ? "…" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button onClick={() => router.push(`/admin/quizzes/${quizId}/edit`)} className="text-parchment/50 text-sm hover:text-gold whitespace-nowrap">
             Exit preview
           </button>
         </div>

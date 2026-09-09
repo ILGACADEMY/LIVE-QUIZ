@@ -750,6 +750,16 @@ dynamic (shows whatever the real remaining time is, not a hardcoded
 Files: `src/app/api/sessions/[id]/start/route.ts`,
 `src/app/api/sessions/[id]/advance/route.ts`.
 
+## 33. Jump to any question in Preview
+
+Preview previously only moved forward one question at a time (either
+auto-advancing or via a "Next" click after answering) — no way to review
+question 15 without clicking through the 14 before it. Added a dropdown
+right next to the question counter, listing every question by number and
+the start of its text, that jumps straight there.
+
+Files: `src/components/admin/QuizPreview.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
