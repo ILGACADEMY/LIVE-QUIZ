@@ -79,7 +79,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ phase: "finished" });
     }
 
-    const startedAt = new Date();
+    // A short shared countdown before the question actually starts —
+    // matches the 3-2-1 the room already sees at the very beginning of
+    // the quiz, now repeated between every question so it's a consistent
+    // ritual, not just a one-time opener. current_question_started_at
+    // (and therefore the timer deadline) is set 3 seconds in the future;
+    // participants show a local countdown until that moment arrives
+    // rather than seeing the question the instant the presenter clicks.
+    const COUNTDOWN_MS = 3000;
+    const startedAt = new Date(Date.now() + COUNTDOWN_MS);
     const questionTimerSeconds = session.quiz_snapshot.quiz.question_timer_seconds ?? 20;
     const deadline = new Date(startedAt.getTime() + questionTimerSeconds * 1000);
 
@@ -95,7 +103,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .eq("phase", "revealed"); // guards against a double-click race
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    await broadcastSessionEvent(params.id, "question_advanced", { questionIndex: nextIndex });
+    await broadcastSessionEvent(params.id, "question_advanced", {
+      questionIndex: nextIndex,
+      startsAt: startedAt.toISOString()
+    });
     return NextResponse.json({ phase: "question", questionIndex: nextIndex });
   }
 

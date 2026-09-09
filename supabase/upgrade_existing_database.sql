@@ -55,3 +55,6 @@ create table if not exists trainers (
   created_at         timestamptz not null default now()
 );
 create unique index if not exists idx_trainers_name on trainers(lower(name));
+
+-- ============ translated explanations (results page, never shown live) ============
+alter table question_translations add column if not exists explanation text;

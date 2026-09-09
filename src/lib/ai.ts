@@ -2,7 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 
 /**
  * Per-question feedback for a wrong answer. The administrator's own
@@ -48,31 +48,35 @@ export async function generateLearningProfile(params: {
   quizTitle: string;
   categoryBreakdown: { category: string; correct: number; total: number }[];
   topicBreakdown: { topic: string; correct: number; total: number }[];
-}): Promise<{ strong: string[]; improve: string[]; focusTopics: string[]; recommendation: string }> {
+}): Promise<{ summary: string; strong: string[]; improve: string[]; focusTopics: string[]; recommendation: string }> {
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 400,
+    max_tokens: 700,
     system:
       "You analyze a luxury watch retail trainee's quiz performance, broken down both by broad category and by " +
       "specific learning topic, and return ONLY valid JSON, no preamble, no markdown fences, matching exactly: " +
-      '{"strong": string[], "improve": string[], "focusTopics": string[], "recommendation": string}. ' +
-      "strong/improve list broad CATEGORY names (max 4 each) based on the category results. focusTopics lists the " +
-      "specific LEARNING TOPICS (max 5) where this trainee should concentrate their revision next, chosen from the " +
-      "topic results — prioritize topics with low accuracy, and be specific (e.g. 'Chronograph tachymeter function' " +
-      "rather than just repeating a category name). recommendation is one sentence tying it together: what to " +
-      "revise next and why.",
+      '{"summary": string, "strong": string[], "improve": string[], "focusTopics": string[], "recommendation": string}. ' +
+      "summary is a substantive 3-5 sentence overview of this trainee's actual knowledge level on THIS course's " +
+      "content — reference the real percentage figures given to you for each category, name specific strengths and " +
+      "gaps rather than speaking generically, and describe what the pattern of results suggests about their " +
+      "underlying understanding (e.g. do they know facts but misapply them, or are whole categories genuinely " +
+      "unfamiliar). strong/improve list broad CATEGORY names (max 4 each) based on the category results. " +
+      "focusTopics lists the specific LEARNING TOPICS (max 5) where this trainee should concentrate their revision " +
+      "next, chosen from the topic results — prioritize topics with low accuracy, and be specific (e.g. " +
+      "'Chronograph tachymeter function' rather than just repeating a category name). recommendation is one or two " +
+      "sentences naming a concrete next study action.",
     messages: [
       {
         role: "user",
-        content: `Quiz: ${params.quizTitle}\n\nCategory results:\n${params.categoryBreakdown
-          .map((c) => `- ${c.category}: ${c.correct}/${c.total} correct`)
-          .join("\n")}\n\nLearning topic results:\n${params.topicBreakdown
-          .map((t) => `- ${t.topic}: ${t.correct}/${t.total} correct`)
+        content: `Quiz: ${params.quizTitle}\n\nCategory results (with percentages):\n${params.categoryBreakdown
+          .map((c) => `- ${c.category}: ${c.correct}/${c.total} correct (${Math.round((c.correct / c.total) * 100)}%)`)
+          .join("\n")}\n\nLearning topic results (with percentages):\n${params.topicBreakdown
+          .map((t) => `- ${t.topic}: ${t.correct}/${t.total} correct (${Math.round((t.correct / t.total) * 100)}%)`)
           .join("\n")}`
       }
     ]
   });
-  return safeParseJson(extractText(msg), { strong: [], improve: [], focusTopics: [], recommendation: "" });
+  return safeParseJson(extractText(msg), { summary: "", strong: [], improve: [], focusTopics: [], recommendation: "" });
 }
 
 /** Admin-facing aggregate analysis across all participants (spec §33-34). */
@@ -83,16 +87,21 @@ export async function generateQuizPerformanceAnalysis(params: {
   passRatePercent: number;
   averageCompletionSeconds: number;
   questionDifficulty: { questionText: string; correctPercent: number }[];
+  categoryBreakdown: { category: string; correct: number; total: number }[];
+  topicBreakdown: { topic: string; correct: number; total: number }[];
   speedVsAccuracyNote: string;
 }): Promise<string> {
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 400,
+    max_tokens: 700,
     system:
-      "You write a concise trainer-facing performance analysis for a luxury retail quiz session. " +
-      "Plain prose, 4-6 sentences, no headers or bullet lists. Reference concrete numbers given to you. " +
-      "Call out the hardest and easiest questions by their text, note any speed-vs-accuracy trade-off, " +
-      "and end with one specific training recommendation.",
+      "You write a detailed trainer-facing performance analysis for a luxury retail quiz session, covering the " +
+      "WHOLE GROUP's knowledge on this course's content. Plain prose, 8-12 sentences, no headers or bullet lists. " +
+      "Reference concrete numbers given to you — category and topic percentages especially, not just the overall " +
+      "average. Explicitly name which categories/topics the group as a whole is strong in and which need a " +
+      "refresher, call out the hardest and easiest individual questions by their text, note any speed-vs-accuracy " +
+      "trade-off, and end with two or three specific, actionable training recommendations for what to cover in the " +
+      "next session.",
     messages: [
       {
         role: "user",
@@ -102,6 +111,12 @@ export async function generateQuizPerformanceAnalysis(params: {
           `Average score: ${params.averageScorePercent}%\n` +
           `Pass rate: ${params.passRatePercent}%\n` +
           `Average completion time: ${Math.round(params.averageCompletionSeconds)}s\n` +
+          `Category results (with percentages):\n${params.categoryBreakdown
+            .map((c) => `- ${c.category}: ${c.correct}/${c.total} correct (${Math.round((c.correct / c.total) * 100)}%)`)
+            .join("\n")}\n` +
+          `Learning topic results (with percentages):\n${params.topicBreakdown
+            .map((t) => `- ${t.topic}: ${t.correct}/${t.total} correct (${Math.round((t.correct / t.total) * 100)}%)`)
+            .join("\n")}\n` +
           `Question difficulty (% who got it right):\n${params.questionDifficulty
             .map((q) => `- "${q.questionText}": ${q.correctPercent}%`)
             .join("\n")}\n` +
@@ -109,6 +124,7 @@ export async function generateQuizPerformanceAnalysis(params: {
       }
     ]
   });
+
   return extractText(msg);
 }
 
@@ -143,22 +159,26 @@ export async function translateQuestion(params: {
   optionB: string;
   optionC: string;
   optionD: string;
-}): Promise<{ question_text: string; option_a: string; option_b: string; option_c: string; option_d: string }> {
+  explanation?: string; // only ever needed for the results page, never the live question
+}): Promise<{ question_text: string; option_a: string; option_b: string; option_c: string; option_d: string; explanation: string }> {
   const fallback = {
     question_text: params.questionText,
     option_a: params.optionA,
     option_b: params.optionB,
     option_c: params.optionC,
-    option_d: params.optionD
+    option_d: params.optionD,
+    explanation: params.explanation ?? ""
   };
 
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 400,
+    max_tokens: 500,
     system:
-      `Translate the given watch-retail training quiz question and its four answer options into ${params.languageName}. ` +
+      `Translate the given watch-retail training quiz question, its four answer options` +
+      `${params.explanation ? ", and its explanation" : ""} into ${params.languageName}. ` +
       "Keep technical horology terms accurate and natural for a retail sales context. Return ONLY valid JSON, no preamble, " +
-      'no markdown fences, matching exactly: {"question_text": string, "option_a": string, "option_b": string, "option_c": string, "option_d": string}.',
+      'no markdown fences, matching exactly: {"question_text": string, "option_a": string, "option_b": string, "option_c": string, "option_d": string, "explanation": string}. ' +
+      'If no explanation was provided, return "" for that field — do not invent one.',
     messages: [
       {
         role: "user",
@@ -167,7 +187,8 @@ export async function translateQuestion(params: {
           option_a: params.optionA,
           option_b: params.optionB,
           option_c: params.optionC,
-          option_d: params.optionD
+          option_d: params.optionD,
+          explanation: params.explanation ?? ""
         })
       }
     ]

@@ -31,6 +31,7 @@ interface ResultsData {
 }
 
 interface Profile {
+  summary: string;
   strong: string[];
   improve: string[];
   focusTopics: string[];
@@ -185,6 +186,7 @@ export default function ResultsPage({
         {profile && (
           <div className="case-panel p-6 mb-6">
             <p className="field-label mb-4">Your learning profile</p>
+            {profile.summary && <p className="text-sm text-parchment/80 leading-relaxed mb-4">{profile.summary}</p>}
             {profile.strong.length > 0 && (
               <p className="text-sm mb-2">
                 <span className="text-gold">Strong categories: </span>
@@ -208,6 +210,62 @@ export default function ResultsPage({
               </div>
             )}
             {profile.recommendation && <p className="text-sm text-parchment/60">{profile.recommendation}</p>}
+          </div>
+        )}
+
+        {/* Visual percentage breakdown — the actual numbers behind the AI
+            profile above, not just its summary of them. Sorted weakest
+            first so the thing most worth studying is the first thing
+            seen. */}
+        {data.categoryBreakdown && data.categoryBreakdown.length > 0 && (
+          <div className="case-panel p-6 mb-6">
+            <p className="field-label mb-4">Knowledge by category</p>
+            <div className="flex flex-col gap-3">
+              {[...data.categoryBreakdown]
+                .sort((a, b) => a.correct / a.total - b.correct / b.total)
+                .map((c) => {
+                  const pct = Math.round((c.correct / c.total) * 100);
+                  return (
+                    <div key={c.category}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>{c.category}</span>
+                        <span className="font-dial text-parchment/60">
+                          {c.correct}/{c.total} · {pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-hairline overflow-hidden">
+                        <div className={`h-full ${pct >= 70 ? "bg-gold" : pct >= 40 ? "bg-parchment/50" : "bg-crimson"}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {data.topicBreakdown && data.topicBreakdown.length > 0 && (
+          <div className="case-panel p-6 mb-6">
+            <p className="field-label mb-4">Knowledge by topic</p>
+            <div className="flex flex-col gap-3">
+              {[...data.topicBreakdown]
+                .sort((a, b) => a.correct / a.total - b.correct / b.total)
+                .map((t) => {
+                  const pct = Math.round((t.correct / t.total) * 100);
+                  return (
+                    <div key={t.topic}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span>{t.topic}</span>
+                        <span className="font-dial text-parchment/60">
+                          {t.correct}/{t.total} · {pct}%
+                        </span>
+                      </div>
+                      <div className="h-1.5 bg-hairline overflow-hidden">
+                        <div className={`h-full ${pct >= 70 ? "bg-gold" : pct >= 40 ? "bg-parchment/50" : "bg-crimson"}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
 

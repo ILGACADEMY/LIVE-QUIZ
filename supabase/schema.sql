@@ -162,6 +162,7 @@ create table if not exists question_translations (
   option_b          text not null,
   option_c          text not null,
   option_d          text not null,
+  explanation       text, -- only needed for the results page (never shown live), so nullable and filled in lazily on first view
   created_at        timestamptz not null default now(),
   unique (session_id, question_index, language_code)
 );

@@ -85,6 +85,32 @@ export async function POST(req: NextRequest) {
       return { questionText: q.question_text, correctPercent };
     });
 
+    // Group-wide category and topic breakdown — the same shape used for
+    // an individual participant's profile, but aggregated across every
+    // answer in the session. This is what lets the group analysis name
+    // specific categories/topics the whole room struggled with, not just
+    // an overall average score.
+    const categoryBreakdown = Object.values(
+      answers.reduce<Record<string, { category: string; correct: number; total: number }>>((acc, a) => {
+        const q = session.quiz_snapshot.questions[a.question_index];
+        const key = q.category || "General";
+        acc[key] = acc[key] || { category: key, correct: 0, total: 0 };
+        acc[key].total += 1;
+        if (a.is_correct) acc[key].correct += 1;
+        return acc;
+      }, {})
+    );
+    const topicBreakdown = Object.values(
+      answers.reduce<Record<string, { topic: string; correct: number; total: number }>>((acc, a) => {
+        const q = session.quiz_snapshot.questions[a.question_index];
+        const key = q.learning_topic || q.category || "General";
+        acc[key] = acc[key] || { topic: key, correct: 0, total: 0 };
+        acc[key].total += 1;
+        if (a.is_correct) acc[key].correct += 1;
+        return acc;
+      }, {})
+    );
+
     const highSpeedLowAccuracy = questionDifficulty.filter((q) => q.correctPercent < 50).length;
     const speedVsAccuracyNote =
       highSpeedLowAccuracy > totalQuestions / 3
@@ -98,13 +124,15 @@ export async function POST(req: NextRequest) {
         averageScorePercent,
         passRatePercent,
         averageCompletionSeconds,
+        categoryBreakdown,
+        topicBreakdown,
         questionDifficulty,
         speedVsAccuracyNote
       });
-      return NextResponse.json({ analysis, averageScorePercent, passRatePercent });
+      return NextResponse.json({ analysis, averageScorePercent, passRatePercent, categoryBreakdown, topicBreakdown });
     } catch (err) {
       console.error("AI admin analysis error:", err);
-      return NextResponse.json({ analysis: null, averageScorePercent, passRatePercent });
+      return NextResponse.json({ analysis: null, averageScorePercent, passRatePercent, categoryBreakdown, topicBreakdown });
     }
   }
 

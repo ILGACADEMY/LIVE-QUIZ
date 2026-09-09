@@ -104,7 +104,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         p.city ?? "",
         p.mobile ?? "",
         p.email ?? "",
-        `${correctCountById.get(p.id) ?? 0}/${totalQuestions}`,
+        `${correctCountById.get(p.id) ?? 0} of ${totalQuestions}`,
         p.total_score,
         p.base_score,
         p.speed_score,

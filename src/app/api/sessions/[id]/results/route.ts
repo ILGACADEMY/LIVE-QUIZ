@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession } from "@/lib/types";
+import { translateQuestion } from "@/lib/ai";
+import { languageName } from "@/lib/languages";
 
 const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d" } as const;
 
@@ -51,21 +53,122 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         )
       : null;
 
-  const breakdown = answers.map((a) => {
-    const q = session.quiz_snapshot.questions[a.question_index];
-    return {
-      questionIndex: a.question_index,
-      questionText: q.question_text,
-      category: q.category,
-      isCorrect: a.is_correct,
-      selectedText: q[OPTION_FIELD[a.selected_option as keyof typeof OPTION_FIELD]],
-      correctText: q[OPTION_FIELD[q.correct_option]],
-      explanation: q.explanation,
-      baseScore: a.base_score,
-      speedBonus: a.speed_bonus,
-      questionScore: a.question_score
-    };
-  });
+  // Results are the one place a participant's language choice should
+  // show up even though nothing live ever revealed this content to them
+  // (see the "correct/incorrect only" change earlier) — this is where
+  // they actually read the correct answer and the explanation, so it's
+  // the place that matters most to get translated.
+  const language = participant.language ?? "en";
+  const shouldTranslate = language !== "en" && quiz.translation_enabled;
+
+  const breakdown = await Promise.all(
+    answers.map(async (a) => {
+      const q = session.quiz_snapshot.questions[a.question_index];
+      const selectedText = q[OPTION_FIELD[a.selected_option as keyof typeof OPTION_FIELD]];
+      const correctText = q[OPTION_FIELD[q.correct_option]];
+
+      if (!shouldTranslate) {
+        return {
+          questionIndex: a.question_index,
+          questionText: q.question_text,
+          category: q.category,
+          isCorrect: a.is_correct,
+          selectedText,
+          correctText,
+          explanation: q.explanation,
+          baseScore: a.base_score,
+          speedBonus: a.speed_bonus,
+          questionScore: a.question_score
+        };
+      }
+
+      // Reuses the SAME cache table the live question screen writes to —
+      // if this question was already translated during the live quiz
+      // (question_text/options), this reuses that row and only needs to
+      // fill in the explanation, rather than re-translating everything.
+      const { data: cached } = await supabaseAdmin
+        .from("question_translations")
+        .select("*")
+        .eq("session_id", params.id)
+        .eq("question_index", a.question_index)
+        .eq("language_code", language)
+        .maybeSingle();
+
+      if (cached && cached.explanation) {
+        const optionMap: Record<string, string> = { A: cached.option_a, B: cached.option_b, C: cached.option_c, D: cached.option_d };
+        return {
+          questionIndex: a.question_index,
+          questionText: cached.question_text,
+          category: q.category,
+          isCorrect: a.is_correct,
+          selectedText: optionMap[a.selected_option] ?? selectedText,
+          correctText: optionMap[q.correct_option] ?? correctText,
+          explanation: cached.explanation,
+          baseScore: a.base_score,
+          speedBonus: a.speed_bonus,
+          questionScore: a.question_score
+        };
+      }
+
+      try {
+        const translated = await translateQuestion({
+          languageName: languageName(language),
+          questionText: q.question_text,
+          optionA: q.option_a,
+          optionB: q.option_b,
+          optionC: q.option_c,
+          optionD: q.option_d,
+          explanation: q.explanation
+        });
+        await supabaseAdmin.from("question_translations").upsert(
+          {
+            session_id: params.id,
+            question_index: a.question_index,
+            language_code: language,
+            question_text: translated.question_text,
+            option_a: translated.option_a,
+            option_b: translated.option_b,
+            option_c: translated.option_c,
+            option_d: translated.option_d,
+            explanation: translated.explanation
+          },
+          { onConflict: "session_id,question_index,language_code" }
+        );
+        const optionMap: Record<string, string> = {
+          A: translated.option_a,
+          B: translated.option_b,
+          C: translated.option_c,
+          D: translated.option_d
+        };
+        return {
+          questionIndex: a.question_index,
+          questionText: translated.question_text,
+          category: q.category,
+          isCorrect: a.is_correct,
+          selectedText: optionMap[a.selected_option] ?? selectedText,
+          correctText: optionMap[q.correct_option] ?? correctText,
+          explanation: translated.explanation,
+          baseScore: a.base_score,
+          speedBonus: a.speed_bonus,
+          questionScore: a.question_score
+        };
+      } catch (err) {
+        console.error("Results translation error, falling back to English:", err);
+        return {
+          questionIndex: a.question_index,
+          questionText: q.question_text,
+          category: q.category,
+          isCorrect: a.is_correct,
+          selectedText,
+          correctText,
+          explanation: q.explanation,
+          baseScore: a.base_score,
+          speedBonus: a.speed_bonus,
+          questionScore: a.question_score
+        };
+      }
+    })
+  );
 
   const categoryBreakdown = Object.values(
     breakdown.reduce<Record<string, { category: string; correct: number; total: number }>>((acc, b) => {

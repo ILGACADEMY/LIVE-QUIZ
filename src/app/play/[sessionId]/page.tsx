@@ -89,6 +89,18 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       return;
     }
     if (data.phase === "question") {
+      // Fallback for anyone who catches this via the regular poll instead
+      // of the question_advanced broadcast (a missed/delayed broadcast,
+      // or a client that just reconnected): if the server says this
+      // question hasn't actually started yet, show the same local 3-2-1
+      // rather than the question itself — the countdown effect below
+      // will re-check and reveal it right on schedule.
+      const startsAt = new Date(data.questionStartedAt).getTime();
+      if (startsAt > Date.now() + 250) {
+        startsAtRef.current = startsAt;
+        setPhase("countdown");
+        return;
+      }
       setQ(data);
       setAnsweredSoFar(data.answeredSoFar);
       setSelected(null);
@@ -144,7 +156,20 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       })
       .on("broadcast", { event: "quiz_ended" }, () => fetchState())
       .on("broadcast", { event: "question_revealed" }, () => fetchState())
-      .on("broadcast", { event: "question_advanced" }, () => fetchState())
+      .on("broadcast", { event: "question_advanced" }, (msg) => {
+        // Same 3-2-1 treatment as the very first question, not just a
+        // one-time opener — reuses the exact same countdown effect
+        // below, which already calls fetchState() the moment the shared
+        // start time arrives, so the actual question reveals itself
+        // right on schedule without any extra code here.
+        const payload = msg.payload as { startsAt?: string };
+        if (payload.startsAt) {
+          startsAtRef.current = new Date(payload.startsAt).getTime();
+          setPhase("countdown");
+        } else {
+          fetchState();
+        }
+      })
       .on("broadcast", { event: "answer_count" }, (msg) => {
         const payload = msg.payload as { questionIndex?: number; answered?: number; type?: string; joined?: number };
         if (payload.type === "joined") {

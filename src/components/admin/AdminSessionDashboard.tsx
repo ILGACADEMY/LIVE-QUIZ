@@ -54,6 +54,8 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [storeFilter, setStoreFilter] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [analysis, setAnalysis] = useState<string | null>(null);
+  const [analysisCategoryBreakdown, setAnalysisCategoryBreakdown] = useState<{ category: string; correct: number; total: number }[]>([]);
+  const [analysisTopicBreakdown, setAnalysisTopicBreakdown] = useState<{ topic: string; correct: number; total: number }[]>([]);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
   const poll = useCallback(async () => {
@@ -180,7 +182,12 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
       body: JSON.stringify({ type: "admin", sessionId })
     });
     setAnalysisLoading(false);
-    if (res.ok) setAnalysis((await res.json()).analysis);
+    if (res.ok) {
+      const data = await res.json();
+      setAnalysis(data.analysis);
+      setAnalysisCategoryBreakdown(data.categoryBreakdown ?? []);
+      setAnalysisTopicBreakdown(data.topicBreakdown ?? []);
+    }
   }
 
   if (!state) return <main className="min-h-screen px-6 py-10 text-parchment/50">Loading session…</main>;
@@ -424,6 +431,63 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             </div>
 
             {analysis && <div className="case-panel p-6 mb-6 text-sm text-parchment/70 leading-relaxed">{analysis}</div>}
+
+            {(analysisCategoryBreakdown.length > 0 || analysisTopicBreakdown.length > 0) && (
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
+                {analysisCategoryBreakdown.length > 0 && (
+                  <div className="case-panel p-6">
+                    <p className="field-label mb-4">Group knowledge by category</p>
+                    <div className="flex flex-col gap-3">
+                      {[...analysisCategoryBreakdown]
+                        .sort((a, b) => a.correct / a.total - b.correct / b.total)
+                        .map((c) => {
+                          const pct = Math.round((c.correct / c.total) * 100);
+                          return (
+                            <div key={c.category}>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>{c.category}</span>
+                                <span className="font-dial text-parchment/50">{pct}%</span>
+                              </div>
+                              <div className="h-1.5 bg-hairline overflow-hidden">
+                                <div
+                                  className={`h-full ${pct >= 70 ? "bg-gold" : pct >= 40 ? "bg-parchment/50" : "bg-crimson"}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+                {analysisTopicBreakdown.length > 0 && (
+                  <div className="case-panel p-6">
+                    <p className="field-label mb-4">Group knowledge by topic</p>
+                    <div className="flex flex-col gap-3">
+                      {[...analysisTopicBreakdown]
+                        .sort((a, b) => a.correct / a.total - b.correct / b.total)
+                        .map((t) => {
+                          const pct = Math.round((t.correct / t.total) * 100);
+                          return (
+                            <div key={t.topic}>
+                              <div className="flex justify-between text-xs mb-1">
+                                <span>{t.topic}</span>
+                                <span className="font-dial text-parchment/50">{pct}%</span>
+                              </div>
+                              <div className="h-1.5 bg-hairline overflow-hidden">
+                                <div
+                                  className={`h-full ${pct >= 70 ? "bg-gold" : pct >= 40 ? "bg-parchment/50" : "bg-crimson"}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {visibleLeaderboard && (
               <div className="case-panel divide-y divide-hairline">

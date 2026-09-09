@@ -552,6 +552,117 @@ now just reads "Answer locked."
 
 Files: `src/app/play/[sessionId]/page.tsx`.
 
+## 24. 3-2-1 countdown between every question, not just at the start
+
+Previously the shared countdown only ever happened once, right before
+Question 1 — clicking "Next question" afterward jumped straight to the
+new question with no ceremony. Now every question transition gets the
+same treatment: the presenter clicks Next, and every participant's phone
+counts down 3-2-1 together before the new question appears, exactly like
+the opening moment. Under the hood this is a 3-second delay built into
+when the question's timer actually starts (not just a client-side
+animation), broadcast to everyone so the countdown is genuinely
+synchronized, with a same defensive check added to the answer route so a
+submission can't be scored before the question has actually started.
+
+Files: `src/app/api/sessions/[id]/advance/route.ts`,
+`src/app/api/sessions/[id]/answer/route.ts`,
+`src/app/play/[sessionId]/page.tsx`.
+
+## 25. Richer AI analysis — real percentage breakdowns, not just lists
+
+Two things were missing before: the raw category/topic percentages were
+computed and fed to the AI, but never actually shown on screen, and the
+AI's own writeup was short and generic rather than analytical.
+
+- **New visual breakdowns**, sorted weakest-first with a percentage bar
+  per row: "Knowledge by category" and "Knowledge by topic" on the
+  participant's results page, and the equivalent "Group knowledge by
+  category/topic" on the admin's AI analysis view — the actual numbers
+  behind the AI's summary, not just its interpretation of them.
+- **The AI writeup itself is substantially more detailed now**: a
+  participant's profile gets a new 3-5 sentence `summary` paragraph
+  naming specific strengths and gaps with real percentages, not just
+  short category-name lists. The admin's group analysis went from 4-6
+  generic sentences to 8-12, explicitly required to reference category
+  and topic percentages (not just the overall average) and end with
+  multiple concrete training recommendations rather than one vague one.
+
+Files: `src/lib/ai.ts`, `src/app/api/ai/analysis/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
+## 26. Fixed: "Correct" column showing as a date ("4-Jan") in the CSV export
+
+Real bug, and a classic one: the leaderboard CSV wrote this column as
+"1/4" (1 correct out of 4 questions). Excel automatically guesses that
+anything shaped like number/number is a date, so it silently converted
+that into "January 4th" and displayed it as "4-Jan" — the underlying
+data was never wrong, Excel was just misreading the format. Changed to
+"1 of 4" instead, which reads the same to a person but can't be
+mistaken for a date by any spreadsheet program.
+
+Files: `src/app/api/sessions/[id]/export/route.ts`.
+
+## 27. Fixed: AI translation (and every other AI feature) was silently broken — wrong model name
+
+This is the real root cause, and it predates every change I've made to
+this project — I finally found it while investigating the translation
+report. `src/lib/ai.ts` has been calling the Anthropic API with
+`"claude-sonnet-4-6"` as the model name since before this codebase was
+ever handed to me. That is not a valid model identifier. Every single AI
+call in this app — question translation, wrong-answer feedback, the
+participant learning profile, the group analysis — has been failing on
+every request, and every one of those call sites has a silent fallback
+to English/generic-message-only specifically so a temporary AI hiccup
+never breaks the live quiz. That safety net is exactly what made this
+invisible: no error ever surfaced, it just quietly always used the
+fallback, indistinguishable from "AI feature not turned on."
+
+**Fixed:** the model identifier is now `"claude-sonnet-5"`, a real,
+current model. This should make translation, feedback, and both AI
+analyses actually run for the first time — not just resume working,
+actually work for the first time, since this bug likely predates
+anything either of us has tested.
+
+Files: `src/lib/ai.ts`.
+
+## 28. Results page now actually translates too — the second, separate gap
+
+Even with the model fixed, the results page specifically was never wired
+to translate anything at all — a real, separate gap from the model bug.
+The live question screen already had translation logic; the results
+page (where a participant actually reads the correct answer and the
+explanation) was simply never connected to it. Fixed: each question in
+the results breakdown is now translated into the participant's chosen
+language — question text, their selected answer, the correct answer, and
+the explanation — reusing the exact same translation cache the live quiz
+uses (so a question translated live during the quiz doesn't get
+re-translated for results; only the explanation, which is never shown
+live, needs a fresh cache entry).
+
+**Honest scope boundary, not a bug:** static interface text — the join
+screen's field labels, buttons, "Correct"/"Not quite" on the live reveal,
+admin screens — was never part of either translation system and still
+isn't. Only quiz *content* (questions, options, explanations) is
+translated. Building full interface translation would be a real
+additional feature, not a fix to this one — say if you want that scoped
+out separately.
+
+Files: `src/lib/ai.ts`, `src/app/api/sessions/[id]/results/route.ts`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
+## 29. Expanded the language list from 9 to 61
+
+The join screen's language dropdown was limited to a small curated set.
+Since the underlying translation is just a Claude API call — it works
+for any language name you give it — the limit was never technical, just
+the list itself. Expanded to 61 widely-spoken languages, kept as plain
+2-letter codes throughout so the existing "detect the phone's own
+language automatically" logic keeps working for every one of them.
+
+Files: `src/lib/languages.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

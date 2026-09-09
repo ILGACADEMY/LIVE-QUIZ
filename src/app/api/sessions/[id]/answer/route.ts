@@ -41,6 +41,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session.current_question_started_at) {
     return NextResponse.json({ error: "Question timer was not started." }, { status: 409 });
   }
+  // Defense in depth for the pre-question countdown: a correctly-behaving
+  // client withholds the question during the shared 3-2-1, so this
+  // shouldn't normally trigger, but a submission arriving before the
+  // question has actually started (by server clock, not client clock)
+  // is rejected outright rather than silently scored.
+  if (receivedAt < new Date(session.current_question_started_at).getTime()) {
+    return NextResponse.json({ error: "This question hasn't started yet." }, { status: 409 });
+  }
 
   const { data: participant, error: pError } = await supabaseAdmin
     .from("participants")
