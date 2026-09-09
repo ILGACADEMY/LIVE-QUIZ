@@ -295,6 +295,33 @@ affects when a question gets revealed, never when the room moves on.
 
 Files: `src/app/api/sessions/[id]/state/route.ts`.
 
+## 14. Leaderboard: correct-count added, and a real "which city/store is winning" view
+
+Two additions to the leaderboard, both on `GET /api/sessions/:id/leaderboard`:
+
+- **Individual view (Top 10, and the admin's full ranking):** each row now
+  shows a correct-answer fraction ("3/4") alongside the total points —
+  computed from the quiz's actual question count, not questions attempted
+  so far, so it reads consistently throughout the quiz.
+- **New team views** (`?view=byCity` / `?view=byStore`): a genuinely
+  different ranking, not a filter — this sums total points per city (or
+  per store) across everyone from there and ranks cities/stores against
+  each other. **Deliberately shows no participant names** — the point is
+  "which city is leading", not "who is leading". These view toggles only
+  appear on the public leaderboard page when there's more than one
+  distinct city/store, since ranking one city against itself isn't
+  meaningful.
+
+The existing store/city *filter* dropdowns (narrowing the individual
+Top 10 down to just people from one place) are a different, separate
+feature from this — both still exist, doing different jobs: the filter
+answers "who's winning from Dubai specifically", the new team view
+answers "is Dubai winning overall".
+
+Files: `src/app/api/sessions/[id]/leaderboard/route.ts`,
+`src/app/leaderboard/[sessionId]/page.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

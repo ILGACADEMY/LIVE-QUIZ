@@ -14,6 +14,8 @@ interface AdminLeaderboardRow {
   totalScore: number;
   baseScore: number;
   speedBonus: number;
+  correctCount: number;
+  totalQuestions: number;
   completedAt: string;
 }
 
@@ -347,18 +349,22 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
             {visibleLeaderboard && (
               <div className="case-panel divide-y divide-hairline">
-                <div className="grid grid-cols-6 gap-2 px-5 py-3 text-xs text-parchment/40">
+                <div className="grid grid-cols-7 gap-2 px-5 py-3 text-xs text-parchment/40">
                   <span>Rank</span>
                   <span className="col-span-2">Name</span>
                   <span>Store / City</span>
+                  <span>Correct</span>
                   <span>Base / Speed</span>
                   <span className="text-right">Total</span>
                 </div>
                 {visibleLeaderboard.map((r) => (
-                  <div key={r.rank} className="grid grid-cols-6 gap-2 px-5 py-3 text-sm items-center">
+                  <div key={r.rank} className="grid grid-cols-7 gap-2 px-5 py-3 text-sm items-center">
                     <span className="font-dial">{r.rank}</span>
                     <span className="col-span-2">{r.name}</span>
                     <span className="text-parchment/50 text-xs">{[r.store, r.city].filter(Boolean).join(" — ") || "—"}</span>
+                    <span className="font-dial text-xs">
+                      {r.correctCount}/{r.totalQuestions}
+                    </span>
                     <span className="text-parchment/50 text-xs">
                       {r.baseScore} / {r.speedBonus}
                     </span>
