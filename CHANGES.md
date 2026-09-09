@@ -99,6 +99,11 @@ presenter watching the room.
 Files: `src/app/api/sessions/[id]/join/route.ts`,
 `src/app/join/[sessionId]/page.tsx`, `supabase/schema.sql`.
 
+**Update:** Mobile is now required outright (not "mobile-or-email") and
+Email is purely optional — there is no email-sending feature in this app,
+so there was no reason to require an email address. Mobile alone is what
+does the duplicate-prevention work.
+
 ## 4. Leaderboard filtering by store and city
 
 - **Public leaderboard** (`/leaderboard/[sessionId]`): store/city filter

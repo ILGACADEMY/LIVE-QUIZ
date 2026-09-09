@@ -17,20 +17,21 @@ function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
-// POST /api/sessions/:id/join — { name, store, city, mobile?, email?, language? }
-// Name, store, and city are all required. At least one of mobile/email is
-// required too — this is what makes duplicate-attempt prevention possible:
-// without SOME identifier that survives a cleared browser or a different
-// device, there's no way to recognize "this is the same person again."
+// POST /api/sessions/:id/join — { name, store, city, mobile, email?, language? }
+// Name, store, city, AND mobile are all required. Email is optional — it's
+// only ever used as a second matching key for duplicate prevention if
+// someone happens to provide one; nothing is sent to it. Mobile is the one
+// that has to be mandatory, because it's what actually makes duplicate-
+// attempt prevention work: without it, there'd be nothing to check.
 // See the note in the README about why device-level checks (IMEI etc.)
 // aren't possible from a web app at all — this is the strongest check that
 // actually is possible.
 //
-// If the mobile or email has already joined THIS session, we don't create
-// a second participant or reject them outright — we return their EXISTING
-// participant record instead. This covers the legitimate case (their
-// browser storage got cleared, they refresh and re-submit) without ever
-// producing two scored entries for the same person.
+// If the mobile (or email, if given) has already joined THIS session, we
+// don't create a second participant or reject them outright — we return
+// their EXISTING participant record instead. This covers the legitimate
+// case (their browser storage got cleared, they refresh and re-submit)
+// without ever producing two scored entries for the same person.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const { name, store, city, mobile, email, language } = await req.json();
 
@@ -46,13 +47,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (trimmedStore.length > 100) return NextResponse.json({ error: "Store name is too long." }, { status: 400 });
   if (!trimmedCity) return NextResponse.json({ error: "Please enter your city." }, { status: 400 });
   if (trimmedCity.length > 100) return NextResponse.json({ error: "City name is too long." }, { status: 400 });
-  if (!rawMobile && !rawEmail) {
-    return NextResponse.json({ error: "Please enter your mobile number or email address." }, { status: 400 });
+  if (!rawMobile) {
+    return NextResponse.json({ error: "Please enter your mobile number." }, { status: 400 });
   }
 
-  const normalizedMobile = rawMobile ? normalizeMobile(rawMobile) : null;
+  const normalizedMobile = normalizeMobile(rawMobile);
   const normalizedEmail = rawEmail ? normalizeEmail(rawEmail) : null;
-  if (normalizedMobile && normalizedMobile.replace("+", "").length < 6) {
+  if (normalizedMobile.replace("+", "").length < 6) {
     return NextResponse.json({ error: "That mobile number looks incomplete." }, { status: 400 });
   }
   if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -80,21 +81,15 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const translationEnabled = Boolean(session.quiz_snapshot?.quiz?.translation_enabled);
   const languageCode = translationEnabled && SUPPORTED_LANGUAGES.some((l) => l.code === language) ? language : "en";
 
-  // Look for an existing participant in THIS session matching either
-  // identifier before creating a new one.
-  if (normalizedMobile || normalizedEmail) {
-    let query = supabaseAdmin.from("participants").select("*").eq("session_id", params.id);
-    if (normalizedMobile && normalizedEmail) {
-      query = query.or(`mobile.eq.${normalizedMobile},email.eq.${normalizedEmail}`);
-    } else if (normalizedMobile) {
-      query = query.eq("mobile", normalizedMobile);
-    } else {
-      query = query.eq("email", normalizedEmail);
-    }
-    const { data: existing } = await query.maybeSingle();
-    if (existing) {
-      return NextResponse.json({ participant: existing, sessionStatus: session.status, resumed: true }, { status: 200 });
-    }
+  // Look for an existing participant in THIS session matching mobile (or
+  // email too, if one was given) before creating a new one.
+  let existingQuery = supabaseAdmin.from("participants").select("*").eq("session_id", params.id);
+  existingQuery = normalizedEmail
+    ? existingQuery.or(`mobile.eq.${normalizedMobile},email.eq.${normalizedEmail}`)
+    : existingQuery.eq("mobile", normalizedMobile);
+  const { data: existing } = await existingQuery.maybeSingle();
+  if (existing) {
+    return NextResponse.json({ participant: existing, sessionStatus: session.status, resumed: true }, { status: 200 });
   }
 
   const avatar = randomAvatar();
@@ -118,8 +113,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // mobile/email) lands here — treat it the same as the resume path
     // above rather than showing a raw DB error.
     if (error.code === "23505") {
-      let query = supabaseAdmin.from("participants").select("*").eq("session_id", params.id);
-      query = normalizedMobile ? query.eq("mobile", normalizedMobile) : query.eq("email", normalizedEmail!);
+      let query = supabaseAdmin.from("participants").select("*").eq("session_id", params.id).eq("mobile", normalizedMobile);
       const { data: existing } = await query.maybeSingle();
       if (existing) return NextResponse.json({ participant: existing, sessionStatus: session.status, resumed: true }, { status: 200 });
     }

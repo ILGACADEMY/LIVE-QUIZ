@@ -59,7 +59,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
     if (!name.trim()) return setError("Please enter your name.");
     if (!store.trim()) return setError("Please enter your store.");
     if (!city.trim()) return setError("Please enter your city.");
-    if (!mobile.trim() && !email.trim()) return setError("Please enter your mobile number or email address.");
+    if (!mobile.trim()) return setError("Please enter your mobile number.");
 
     setLoading(true);
     const res = await fetch(`/api/sessions/${params.sessionId}/join`, {
@@ -106,7 +106,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
       </div>
 
       <div className="relative z-10 w-full max-w-sm text-center">
-        <p className="text-parchment/40 text-xs tracking-[0.35em] font-body font-medium mb-4">ILG ACADEMY PRESENTS</p>
+        <p className="text-parchment/40 text-xs tracking-[0.35em] font-body font-medium mb-4">ILG ACADEMY</p>
         <MeridianWordmark />
         <div className="w-10 h-px bg-gold/50 mx-auto my-6" />
         {quizTitle && <p className="text-parchment/60 text-sm mb-2">{quizTitle}</p>}
@@ -149,14 +149,15 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
             value={mobile}
             onChange={(e) => setMobile(e.target.value)}
             type="tel"
+            required
             className="field-input mb-1"
             placeholder="e.g. +971 50 123 4567"
           />
-          <p className="text-parchment/30 text-xs mb-5">Or leave blank and use email below instead.</p>
+          <p className="text-parchment/30 text-xs mb-5">Required — this is what stops the same person joining twice.</p>
 
-          <label className="field-label block mb-2">Email</label>
+          <label className="field-label block mb-2">Email (optional)</label>
           <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="field-input mb-1" placeholder="you@example.com" />
-          <p className="text-parchment/30 text-xs mb-5">At least one of mobile or email is required — this is what stops the same person joining twice.</p>
+          <p className="text-parchment/30 text-xs mb-5">Not required — nothing is sent to it.</p>
 
           {translationEnabled && (
             <>
