@@ -379,6 +379,54 @@ leaderboard CSV, since the data was already available from the same fix.
 
 Files: `src/app/api/sessions/[id]/export/route.ts`.
 
+## 17. Fixed: participants got nothing after "End quiz" — no results, no AI feedback, no PDF
+
+The real root cause behind several symptoms at once. "End quiz" only ever
+set the *session's* status to finished — it never marked any participant
+as complete. Every downstream piece (the results page, AI feedback, the
+PDF download, and the AI group-analysis's "not enough participants"
+message) all specifically required a participant's `completed_at` to be
+set, which normally only happens automatically when a quiz reaches its
+actual last question. So ending a quiz early — a completely normal thing
+to do — left every participant's phone on a bare "session ended" screen
+with no path to their score, feedback, or download at all, and the AI
+group-analysis wrongly reported "not enough participants" even when the
+whole room had answered plenty.
+
+**Fixed at the root:** "End quiz" now marks every participant complete
+(based on whatever they'd actually answered) at the moment it's clicked —
+the same thing that already happens automatically on a natural finish.
+Everyone now gets routed straight to their real results, AI feedback, and
+PDF download, whether the quiz ran its full length or was ended early.
+
+Also fixed along the way: the AI group-analysis endpoint had the same
+completed-only requirement bug as the CSV exports (item 16) — same fix
+applied, plus a correction to its average-completion-time math so it
+divides by how many participants actually finished, not by everyone in
+the room (which was quietly dragging the average down).
+
+**Also addressed directly:** the "End quiz" confirmation now only warns
+about cutting someone off mid-question when a question is actually live
+at that moment — not as a blanket warning regardless of context.
+
+Files: `src/app/api/sessions/[id]/end/route.ts`,
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/app/api/ai/analysis/route.ts`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
+## 18. Presentation clicker support
+
+Wireless presentation clickers work by simulating ordinary keyboard key
+presses — almost universally Right Arrow, Page Down, or Spacebar, the
+same keys that advance a PowerPoint slide. The presenter dashboard now
+listens for those and triggers the same Reveal/Next action the on-screen
+button does, whenever a session is live. No pairing or setup beyond
+whatever the clicker already needs to control a slide deck — it "just
+works." Ignored while focus is in a text field (e.g. the post-quiz search
+inputs), and a small on-screen tip makes it discoverable.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

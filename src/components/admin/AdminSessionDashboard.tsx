@@ -96,8 +96,41 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
     poll();
   }
 
+  // Presentation clicker support. Wireless clickers (Logitech, Kensington,
+  // etc.) don't have their own USB/Bluetooth protocol for this — they
+  // work by simulating ordinary keyboard key presses, almost universally
+  // Right Arrow, Page Down, or Spacebar (the same keys that advance a
+  // PowerPoint slide). Listening for those here means a clicker "just
+  // works" without any special pairing or setup beyond what it already
+  // needs to control PowerPoint — letting the presenter walk around the
+  // room with the participants instead of standing at the keyboard.
+  useEffect(() => {
+    function handleKeydown(e: KeyboardEvent) {
+      if (state?.status !== "live" || busy) return;
+      // Don't hijack the key if focus is in a text field (e.g. the
+      // post-quiz name/store/city search inputs) — only intercept while
+      // nothing is actively being typed into.
+      const target = e.target as HTMLElement;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)) return;
+
+      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+        e.preventDefault();
+        advance();
+      }
+    }
+    window.addEventListener("keydown", handleKeydown);
+    return () => window.removeEventListener("keydown", handleKeydown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state?.status, busy, sessionId]);
+
   async function endQuiz() {
-    if (!confirm("End this quiz for everyone? Participants mid-question will be cut off.")) return;
+    // Only warn about a mid-question cutoff when a question is actually
+    // live right now (phase === "question") — if it's already been
+    // revealed, or nothing's active yet, nobody's mid-answer, so that
+    // warning doesn't apply.
+    const midQuestionWarning =
+      state?.phase === "question" ? " Participants on the current question will be cut off before they finish it." : "";
+    if (!confirm(`End this quiz for everyone now?${midQuestionWarning} Everyone will get their results based on what they've answered so far.`)) return;
     setBusy(true);
     await fetch(`/api/sessions/${sessionId}/end`, { method: "POST" });
     setBusy(false);
@@ -181,7 +214,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
               </button>
             )}
             {state.status === "live" && (
-              <button onClick={advance} disabled={busy} className="btn-gold">
+              <button onClick={advance} disabled={busy} className="btn-gold" title="Works with a presentation clicker's next-slide button too">
                 {state.phase === "question" ? "Reveal answer" : "Next question"}
               </button>
             )}
@@ -198,6 +231,13 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             </button>
           </div>
         </div>
+
+        {state.status === "live" && (
+          <p className="text-parchment/30 text-xs -mt-6 mb-8">
+            Tip: a presentation clicker's next-slide button (Right Arrow / Page Down / Space) works here too — no
+            setup needed.
+          </p>
+        )}
 
         {state.status === "waiting" && (
           <section className="case-panel p-10 mb-8 flex flex-col md:flex-row items-center gap-10">

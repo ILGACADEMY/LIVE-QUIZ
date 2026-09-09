@@ -40,15 +40,17 @@ export async function POST(req: NextRequest) {
       .single<LiveSession>();
     if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
-    const { data: participants } = await supabaseAdmin
-      .from("participants")
-      .select("*")
-      .eq("session_id", sessionId)
-      .not("completed_at", "is", null);
+    // Same fix as the CSV exports and leaderboard: don't require
+    // completed_at — "End quiz" only sets it now as of the fix above, but
+    // this endpoint should work regardless of exactly how a session
+    // finished, and even mid-quiz if an admin wants an early read on how
+    // things are going. Anyone who joined but never answered anything
+    // just contributes a 0% to the average, which is accurate, not wrong.
+    const { data: participants } = await supabaseAdmin.from("participants").select("*").eq("session_id", sessionId);
     const { data: answers } = await supabaseAdmin.from("answers").select("*").eq("session_id", sessionId);
 
-    if (!participants || participants.length === 0 || !answers) {
-      return NextResponse.json({ analysis: "Not enough completed responses yet to generate an analysis." });
+    if (!participants || participants.length === 0 || !answers || answers.length === 0) {
+      return NextResponse.json({ analysis: "Not enough responses yet to generate an analysis — at least one participant needs to have answered at least one question." });
     }
 
     const totalQuestions = session.quiz_snapshot.questions.length;
@@ -61,11 +63,18 @@ export async function POST(req: NextRequest) {
         participants.length) *
         100
     );
+    // Divide by how many actually HAVE a completed_at, not by everyone —
+    // otherwise anyone mid-quiz (no completed_at yet) drags this average
+    // down artificially by padding the denominator without contributing
+    // any time at all.
+    const completedParticipants = participants.filter((p) => p.completed_at);
     const averageCompletionSeconds =
-      participants.reduce((sum, p) => {
-        if (!p.completed_at || !session.started_at) return sum;
-        return sum + (new Date(p.completed_at).getTime() - new Date(session.started_at).getTime()) / 1000;
-      }, 0) / participants.length;
+      completedParticipants.length === 0
+        ? 0
+        : completedParticipants.reduce((sum, p) => {
+            if (!session.started_at) return sum;
+            return sum + (new Date(p.completed_at!).getTime() - new Date(session.started_at).getTime()) / 1000;
+          }, 0) / completedParticipants.length;
 
     const questionDifficulty = session.quiz_snapshot.questions.map((q, i) => {
       const forQuestion = answers.filter((a) => a.question_index === i);

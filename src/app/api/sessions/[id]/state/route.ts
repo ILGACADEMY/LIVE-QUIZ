@@ -243,14 +243,22 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .single();
   if (pError || !participant) return NextResponse.json({ error: "Participant not found" }, { status: 404 });
 
+  // Once a session is finished — whether it reached its last question
+  // naturally or the presenter used "End quiz" to stop it early — every
+  // participant gets routed to their real results, not a dead end.
+  // /end (and /advance on natural completion) both set completed_at for
+  // everyone, so this is always meaningful: it reflects whatever they
+  // actually answered, even if the quiz didn't run its full length.
+  if (session.status === "finished") {
+    return NextResponse.json({
+      status: "finished",
+      phase: "finished",
+      totalScore: participant.total_score,
+      totalQuestions
+    });
+  }
+
   if (session.status !== "live") {
-    // Distinguishes "never started yet" from "ended early by the presenter
-    // before naturally finishing" — same distinction the client already
-    // relied on before this migration (status='finished' + phase !==
-    // 'finished' means an early cutoff, not a completed run).
-    if (session.status === "finished" && session.phase !== "finished") {
-      return NextResponse.json({ status: "finished", phase: "ended" });
-    }
     return NextResponse.json({ status: session.status, phase: "waiting" });
   }
 
