@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
 
 // POST /api/sessions/:id/end — "END QUIZ" (spec §23). Session data (spec
 // §35) is retained for 24h from this moment for the admin to review
 // results/leaderboard, then auto-deleted. Use /delete to purge sooner.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

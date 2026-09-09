@@ -518,6 +518,40 @@ distribution, explanation) still shows exactly as normal first.
 Files: `src/app/api/sessions/[id]/state/route.ts`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 22. Reverted: trainer accounts — back to one single admin login
+
+The named/expiring/per-quiz trainer login system (item 20) added real
+complexity that wasn't worth it in practice — reverted cleanly back to
+the original single shared `ADMIN_PASSWORD` login, no roles, no name
+field, no trainer table lookups on every request. The `/admin/trainers`
+management page, the trainer API routes, and the password-hashing utility
+have all been removed outright rather than left dormant.
+
+**One thing worth knowing:** the `trainers` database table itself is
+still sitting in your Supabase database (nothing dropped it) — it's just
+completely unused by the app now. Harmless to leave as-is; say the word
+if you'd like a cleanup script to drop it.
+
+Files reverted: `src/lib/admin-auth.ts`, `src/lib/require-admin.ts`,
+`src/app/api/admin/login/route.ts`, `src/app/admin/login/page.tsx`,
+`src/app/admin/page.tsx`, `src/app/admin/quizzes/[id]/edit/page.tsx`,
+`src/app/admin/quizzes/[id]/preview/page.tsx`,
+`src/app/admin/session/[sessionId]/page.tsx`,
+`src/components/admin/QuizLibrary.tsx`, and every session-control API
+route back to the single admin check. Removed: `src/app/admin/trainers/`,
+`src/components/admin/TrainerManager.tsx`, `src/app/api/trainers/`,
+`src/lib/password.ts`.
+
+## 23. Participant screens simplified further
+
+Two more places were still showing a live count to participants (a
+holdover from before "counts are presenter-only" was established) — the
+"answer locked" screen showed "{N} answered", and the live question
+screen showed the same in its header. Both removed; the locked screen
+now just reads "Answer locked."
+
+Files: `src/app/play/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

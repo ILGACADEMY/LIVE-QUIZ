@@ -4,28 +4,18 @@ import { NextRequest } from "next/server";
 
 const COOKIE_NAME = "ilg_admin_session";
 
-export type Role = "admin" | "trainer";
-
 /**
- * Two shared passwords, two roles — still deliberately simple (no
- * per-person accounts), but now supports handing a trainer running
- * sessions in another region a password that can launch and control a
- * quiz without being able to touch its content:
- *   - ADMIN_PASSWORD → "admin": everything, including creating, editing,
- *     duplicating, and deleting quiz templates.
- *   - TRAINER_PASSWORD → "trainer": can view the quiz list, launch a
- *     session, and fully control it live (start/reveal/next/end,
- *     leaderboard, exports, AI analysis) — but every quiz-editing route
- *     and page rejects this role outright, not just hides the button for
- *     it.
- * The cookie holds only the ROLE name (never the password itself) once
- * validated — httpOnly, so it can only ever be set by our own server
- * after a real password check in /api/admin/login.
+ * Deliberately simple: one shared ADMIN_PASSWORD env var gates the whole
+ * /admin area. On login we set an httpOnly cookie holding the password
+ * itself — good enough for a single-organization internal tool behind
+ * HTTPS. (A named, expiring, per-quiz trainer-login system was built and
+ * then deliberately reverted — it added real complexity for a need that
+ * didn't end up being worth it. If that need comes back later, it's
+ * still in this project's git history to revive rather than rebuild from
+ * scratch.)
  */
-export function roleForPassword(password: string): Role | null {
-  if (process.env.ADMIN_PASSWORD && password === process.env.ADMIN_PASSWORD) return "admin";
-  if (process.env.TRAINER_PASSWORD && password === process.env.TRAINER_PASSWORD) return "trainer";
-  return null;
+export function isValidAdminPassword(password: string): boolean {
+  return Boolean(process.env.ADMIN_PASSWORD) && password === process.env.ADMIN_PASSWORD;
 }
 
 export function adminCookieOptions() {
@@ -39,34 +29,14 @@ export function adminCookieOptions() {
   };
 }
 
-function roleFromCookieValue(value: string | undefined): Role | null {
-  return value === "admin" || value === "trainer" ? value : null;
-}
-
-/** The role of the current request, or null if not logged in at all. */
-export function requestRole(req: NextRequest): Role | null {
-  return roleFromCookieValue(req.cookies.get(COOKIE_NAME)?.value);
-}
-
-/** The role of the current server-component session, or null. */
-export function sessionRole(): Role | null {
-  return roleFromCookieValue(cookies().get(COOKIE_NAME)?.value);
-}
-
-/** Full admin only — quiz creation/editing/deletion, branding, uploads. */
 export function isAdminRequestAuthorized(req: NextRequest): boolean {
-  return requestRole(req) === "admin";
-}
-export function isAdminSessionAuthorized(): boolean {
-  return sessionRole() === "admin";
+  const cookie = req.cookies.get(COOKIE_NAME)?.value;
+  return Boolean(cookie) && cookie === process.env.ADMIN_PASSWORD;
 }
 
-/** Admin OR trainer — launching and running a live session, and reviewing its results afterward. */
-export function isSessionControllerRequestAuthorized(req: NextRequest): boolean {
-  return requestRole(req) === "admin" || requestRole(req) === "trainer";
-}
-export function isSessionControllerSessionAuthorized(): boolean {
-  return sessionRole() === "admin" || sessionRole() === "trainer";
+export function isAdminSessionAuthorized(): boolean {
+  const cookie = cookies().get(COOKIE_NAME)?.value;
+  return Boolean(cookie) && cookie === process.env.ADMIN_PASSWORD;
 }
 
 export { COOKIE_NAME };

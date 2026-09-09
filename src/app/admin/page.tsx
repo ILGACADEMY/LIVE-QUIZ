@@ -1,8 +1,8 @@
-import { requireSessionController } from "@/lib/require-admin";
+import { requireAdmin } from "@/lib/require-admin";
 import QuizLibrary from "@/components/admin/QuizLibrary";
 
 export default function AdminHome() {
-  const role = requireSessionController();
+  requireAdmin();
   return (
     <main className="min-h-screen px-6 py-10 md:px-12">
       <div className="max-w-5xl mx-auto">
@@ -12,7 +12,7 @@ export default function AdminHome() {
             <h1 className="font-display text-3xl italic">My Quizzes</h1>
           </div>
         </div>
-        <QuizLibrary role={role} />
+        <QuizLibrary />
       </div>
     </main>
   );

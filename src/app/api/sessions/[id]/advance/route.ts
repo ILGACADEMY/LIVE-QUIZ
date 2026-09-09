@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
 import { LiveSession } from "@/lib/types";
 
@@ -22,7 +22,7 @@ import { LiveSession } from "@/lib/types";
 // only) automatically once the per-question deadline passes, handled by
 // the self-healing check in the state route rather than here.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

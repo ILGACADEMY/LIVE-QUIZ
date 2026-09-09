@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized, isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 
-// GET /api/quizzes — "MY QUIZZES" library (spec §3). Trainers can view
-// this too — they need to pick a quiz to launch — but see POST below for
-// creation, which stays admin-only.
+// GET /api/quizzes — "MY QUIZZES" library (spec §3)
 export async function GET(req: NextRequest) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -230,3 +230,36 @@ $$;
 insert into storage.buckets (id, name, public)
 values ('quiz-images', 'quiz-images', true)
 on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- Branding (one-time logo upload, shown on every page)
+-- ---------------------------------------------------------------------------
+create table if not exists app_settings (
+  id uuid primary key default gen_random_uuid(),
+  logo_url text,
+  updated_at timestamptz not null default now()
+);
+insert into app_settings (id)
+select gen_random_uuid()
+where not exists (select 1 from app_settings);
+
+-- ---------------------------------------------------------------------------
+-- Named, expiring trainer accounts — each one can present exactly ONE
+-- assigned quiz (start/reveal/next/end it, view results) and nothing
+-- else: no quiz list beyond their own assignment, no editing, no other
+-- quiz's data. `password_hash` is salted+hashed (scrypt), never stored
+-- or logged in plain text, unlike the single shared ADMIN_PASSWORD env
+-- var this sits alongside. `expires_at` is enforced on every request, not
+-- just at login — access stops working the moment it passes, even for an
+-- already-open session.
+-- ---------------------------------------------------------------------------
+create table if not exists trainers (
+  id                 uuid primary key default gen_random_uuid(),
+  name               text not null,
+  password_hash      text not null,
+  assigned_quiz_id   uuid references quizzes(id) on delete set null,
+  expires_at         timestamptz, -- null = never expires
+  created_at         timestamptz not null default now()
+);
+create unique index if not exists idx_trainers_name on trainers(lower(name));
+

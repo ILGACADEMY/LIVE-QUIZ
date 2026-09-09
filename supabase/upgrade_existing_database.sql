@@ -44,3 +44,14 @@ where not exists (select 1 from app_settings);
 -- ============ short join code (QR alternative) ============
 alter table sessions add column if not exists short_code text;
 create unique index if not exists idx_sessions_short_code_active on sessions(short_code) where status != 'finished';
+
+-- ============ named, expiring trainer accounts (replaces the old single shared TRAINER_PASSWORD) ============
+create table if not exists trainers (
+  id                 uuid primary key default gen_random_uuid(),
+  name               text not null,
+  password_hash      text not null,
+  assigned_quiz_id   uuid references quizzes(id) on delete set null,
+  expires_at         timestamptz,
+  created_at         timestamptz not null default now()
+);
+create unique index if not exists idx_trainers_name on trainers(lower(name));

@@ -3,20 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Quiz } from "@/lib/types";
-import { Role } from "@/lib/admin-auth";
 
 type QuizRow = Quiz & { question_count: number };
 
-// Trainers (role === "trainer") can see this list and launch a quiz, but
-// every content-changing action (create/edit/duplicate/delete) is hidden
-// here — and rejected by the underlying API routes regardless, so this
-// isn't the only thing standing between a trainer and editing a quiz.
-export default function QuizLibrary({ role }: { role: Role }) {
+export default function QuizLibrary() {
   const router = useRouter();
   const [quizzes, setQuizzes] = useState<QuizRow[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const isAdmin = role === "admin";
 
   const load = useCallback(async () => {
     const res = await fetch("/api/quizzes");
@@ -37,10 +31,6 @@ export default function QuizLibrary({ role }: { role: Role }) {
       const res = await fetch("/api/quizzes", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // Previously this failed with no visible message at all — the
-        // most common cause is the database missing a column the code
-        // expects (e.g. a migration that hasn't been run yet), and
-        // Supabase's own error message says exactly which one.
         setError(data.error ?? "Could not create a new quiz.");
         return;
       }
@@ -91,15 +81,10 @@ export default function QuizLibrary({ role }: { role: Role }) {
   return (
     <div>
       <div className="flex justify-between items-center mb-6">
-        <div>
-          <p className="text-parchment/50 text-sm">{quizzes.length} quiz template{quizzes.length !== 1 ? "s" : ""}</p>
-          {!isAdmin && <p className="text-parchment/30 text-xs mt-1">Trainer access — you can launch and run quizzes, not edit them.</p>}
-        </div>
-        {isAdmin && (
-          <button onClick={createQuiz} disabled={busyId === "new"} className="btn-gold">
-            + Create new quiz
-          </button>
-        )}
+        <p className="text-parchment/50 text-sm">{quizzes.length} quiz template{quizzes.length !== 1 ? "s" : ""}</p>
+        <button onClick={createQuiz} disabled={busyId === "new"} className="btn-gold">
+          + Create new quiz
+        </button>
       </div>
 
       {error && <p className="text-crimson text-sm mb-4">{error}</p>}
@@ -122,19 +107,15 @@ export default function QuizLibrary({ role }: { role: Role }) {
                 </p>
               </div>
               <div className="flex flex-wrap gap-2 text-sm">
-                {isAdmin && (
-                  <a href={`/admin/quizzes/${q.id}/edit`} className="btn-ghost px-4 py-2">
-                    Edit
-                  </a>
-                )}
+                <a href={`/admin/quizzes/${q.id}/edit`} className="btn-ghost px-4 py-2">
+                  Edit
+                </a>
                 <a href={`/admin/quizzes/${q.id}/preview`} className="btn-ghost px-4 py-2">
                   Preview
                 </a>
-                {isAdmin && (
-                  <button onClick={() => duplicateQuiz(q.id)} disabled={busyId === q.id} className="btn-ghost px-4 py-2">
-                    Duplicate
-                  </button>
-                )}
+                <button onClick={() => duplicateQuiz(q.id)} disabled={busyId === q.id} className="btn-ghost px-4 py-2">
+                  Duplicate
+                </button>
                 <button
                   onClick={() => launchQuiz(q.id)}
                   disabled={busyId === q.id || q.question_count === 0}
@@ -143,15 +124,13 @@ export default function QuizLibrary({ role }: { role: Role }) {
                 >
                   Launch
                 </button>
-                {isAdmin && (
-                  <button
-                    onClick={() => deleteQuiz(q.id, q.title)}
-                    disabled={busyId === q.id}
-                    className="px-4 py-2 text-crimson/80 hover:text-crimson transition-colors"
-                  >
-                    Delete
-                  </button>
-                )}
+                <button
+                  onClick={() => deleteQuiz(q.id, q.title)}
+                  disabled={busyId === q.id}
+                  className="px-4 py-2 text-crimson/80 hover:text-crimson transition-colors"
+                >
+                  Delete
+                </button>
               </div>
             </div>
           ))}

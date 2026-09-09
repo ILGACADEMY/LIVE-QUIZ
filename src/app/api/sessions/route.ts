@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { Quiz, Question } from "@/lib/types";
 
 // POST /api/sessions — "LAUNCH LIVE SESSION" (spec §20)
 export async function POST(req: NextRequest) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -264,8 +264,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   if (phase === "locked") {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-        <p className="text-gold font-body font-semibold tracking-wide mb-2">ANSWER LOCKED</p>
-        <p className="text-parchment/40 text-xs font-dial mb-6">{answeredSoFar} answered</p>
+        <p className="text-gold font-body font-semibold tracking-wide mb-4">Answer locked</p>
         <p className="text-parchment/50 text-sm">Waiting for the instructor to reveal the answer…</p>
       </main>
     );
@@ -303,7 +302,6 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
             <span>
               Question {q.questionNumber} of {q.totalQuestions}
             </span>
-            <span className="font-dial">{answeredSoFar} answered</span>
           </div>
 
           <div className="flex items-start gap-4 mb-6">

@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized, isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { toQuestionRow } from "@/lib/question-fields";
 
-// GET /api/quizzes/:id — quiz + full question list, for the editor/preview.
-// Trainers can reach this too (needed for the read-only Preview screen) —
-// PUT and DELETE below, which actually change content, stay admin-only.
+// GET /api/quizzes/:id — quiz + full question list, for the editor/preview
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

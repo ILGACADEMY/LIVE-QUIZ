@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isSessionControllerRequestAuthorized } from "@/lib/admin-auth";
+import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
 import { LiveSession } from "@/lib/types";
 
@@ -12,7 +12,7 @@ const COUNTDOWN_SECONDS = 3;
 // server-side deadline — not just flipping status and letting each
 // participant free-run from there.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isSessionControllerRequestAuthorized(req)) {
+  if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
