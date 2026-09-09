@@ -663,6 +663,93 @@ language automatically" logic keeps working for every one of them.
 
 Files: `src/lib/languages.ts`.
 
+## 30. New: "Test AI connection" button — because AI failures are deliberately silent
+
+Since translation still wasn't working after the model-name fix,
+instead of guessing at a third possible cause, I built a real diagnostic
+instead. Every AI feature in this app intentionally swallows its own
+errors so a live quiz never breaks in front of a room — which also means
+a genuine misconfiguration (wrong API key, no billing, wrong model) has
+always looked *identical* to "feature not turned on," with nothing
+telling you which one it actually was.
+
+New: a "Test AI connection" button right on the admin home page. It
+makes one small, real call to Claude completely outside any quiz
+context, and reports back exactly what happened — either confirmation
+it's working, or the *exact* error Anthropic returned (bad key, no
+credits, invalid model, rate limit, etc.), not a guess.
+
+**Two things worth checking directly, in addition to running this:**
+- **Is the exact key from your Claude Console actually pasted into
+  Vercel's `ANTHROPIC_API_KEY`** — a copy-paste mismatch would show up
+  clearly once you run this test.
+- **Is "Multi-language translation" actually switched on for the
+  specific quiz you're testing, AND was the session launched *after*
+  turning it on?** The quiz's settings are frozen into a snapshot the
+  moment a session is launched — toggling the setting on an already-
+  running (or previously launched) session has no effect; you need to
+  launch a fresh session after enabling it.
+
+Files: `src/app/api/admin/test-ai/route.ts` (new),
+`src/components/admin/AiConnectionTest.tsx` (new),
+`src/app/admin/page.tsx`.
+
+## 31. Fixed: translated participants were losing real time to a live translation delay
+
+Real, well-identified fairness bug. Translation was happening "just in
+time" — the first participant in a given language to see a question
+triggered the actual AI translation call right then, while the shared
+clock (same for everyone, English or not) had already started. That's
+exactly the 6-10 second penalty reported: same start time for everyone,
+but a translated participant only got to actually *read* the question
+several seconds later, with the timer already running.
+
+**Fixed by pre-translating ahead of time, in three places, so the
+common case is fully covered:**
+- **Question 0:** warmed the moment "Start quiz" is clicked, before the
+  3-2-1 countdown even begins.
+- **Every question after that:** warmed the moment the *previous*
+  question is revealed — i.e., during the reveal screen's dwell time
+  (however long the presenter spends there), not during the next
+  question's timed, scored window.
+- **A participant joining mid-quiz** with a language nobody's picked
+  yet: warmed at the moment they join, for whichever question is
+  currently live.
+
+In every case, the added latency now falls on a **presenter's click**
+(Start, Reveal) or a **participant's own join action** — never on the
+shared, scored answering window. Subsequent questions/languages that are
+already cached add no delay at all.
+
+**One honest remaining edge case:** a language that's never been used in
+this session before, appearing for the very first time at the exact
+moment a question goes live (not at start, not at a join event) isn't
+covered — there's no way to warm a cache for a language nobody's chosen
+yet. This is a narrow case in practice (it needs someone joining in the
+same instant a question starts, with a brand-new language), and it falls
+back to the same on-demand translation as before, with the same delay,
+same as it always has.
+
+Files: `src/lib/question-translation-cache.ts` (new),
+`src/app/api/sessions/[id]/start/route.ts`,
+`src/app/api/sessions/[id]/advance/route.ts`,
+`src/app/api/sessions/[id]/join/route.ts`.
+
+## 32. Longer countdown (6s vs 3s) specifically when translation is on
+
+An extra safety margin on top of item 31's real fix, not a replacement
+for it. Since translations are now pre-warmed *before* the countdown
+even starts, this doesn't do the heavy lifting — but it costs nothing
+and covers anything unexpected (a slow network moment, the one
+remaining edge case from item 31). Went with 6 seconds rather than 10:
+enough real margin without needlessly slowing the room down on every
+single question. The countdown display itself was already fully
+dynamic (shows whatever the real remaining time is, not a hardcoded
+"3"), so it correctly counts 6-5-4-3-2-1 with no other changes needed.
+
+Files: `src/app/api/sessions/[id]/start/route.ts`,
+`src/app/api/sessions/[id]/advance/route.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

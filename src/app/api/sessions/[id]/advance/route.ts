@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
+import { preWarmQuestionTranslations } from "@/lib/question-translation-cache";
 import { LiveSession } from "@/lib/types";
 
 // POST /api/sessions/:id/advance
@@ -45,6 +46,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       .eq("phase", "question"); // guards against a double-click race
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    // Pre-translate the NEXT question now, while the room is looking at
+    // this reveal screen — not later, during the next question's timed,
+    // scored window. This is the fix for translated participants
+    // effectively losing several seconds of their answering time to a
+    // live translation call: by the time "Next question" gets clicked,
+    // the cache is already warm. Only adds latency to THIS "Reveal
+    // answer" click (a presenter action, never scored), and only the
+    // first time each language needs this particular question.
+    const nextIndex = session.current_question_index + 1;
+    if (session.quiz_snapshot.quiz.translation_enabled && nextIndex < session.quiz_snapshot.questions.length) {
+      await preWarmQuestionTranslations(params.id, nextIndex, session.quiz_snapshot.questions[nextIndex]);
+    }
+
     await broadcastSessionEvent(params.id, "question_revealed", {
       questionIndex: session.current_question_index
     });
@@ -83,10 +97,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     // matches the 3-2-1 the room already sees at the very beginning of
     // the quiz, now repeated between every question so it's a consistent
     // ritual, not just a one-time opener. current_question_started_at
-    // (and therefore the timer deadline) is set 3 seconds in the future;
+    // (and therefore the timer deadline) is set N seconds in the future;
     // participants show a local countdown until that moment arrives
     // rather than seeing the question the instant the presenter clicks.
-    const COUNTDOWN_MS = 3000;
+    // Longer (6s vs 3s) when translation is on — extra safety margin on
+    // top of the pre-warming above, not the primary fix for it.
+    const COUNTDOWN_MS = (session.quiz_snapshot.quiz.translation_enabled ? 6 : 3) * 1000;
     const startedAt = new Date(Date.now() + COUNTDOWN_MS);
     const questionTimerSeconds = session.quiz_snapshot.quiz.question_timer_seconds ?? 20;
     const deadline = new Date(startedAt.getTime() + questionTimerSeconds * 1000);

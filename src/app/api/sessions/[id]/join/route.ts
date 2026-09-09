@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { broadcastSessionEvent } from "@/lib/realtime";
 import { randomAvatar } from "@/lib/avatars";
 import { SUPPORTED_LANGUAGES } from "@/lib/languages";
+import { ensureQuestionTranslated } from "@/lib/question-translation-cache";
 
 function normalizeMobile(raw: string): string {
   // Keep digits and a single leading + — strips spaces/dashes/parens so
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("sessions")
-    .select("id, status, quiz_snapshot")
+    .select("id, status, quiz_snapshot, current_question_index, phase")
     .eq("id", params.id)
     .single();
   if (sessionError || !session) {
@@ -80,6 +81,20 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   // someone hitting this endpoint directly with a different language.
   const translationEnabled = Boolean(session.quiz_snapshot?.quiz?.translation_enabled);
   const languageCode = translationEnabled && SUPPORTED_LANGUAGES.some((l) => l.code === language) ? language : "en";
+
+  // Covers the one case the presenter-side pre-warming (in /start and
+  // /advance) can't: someone joining mid-quiz with a language nobody
+  // already joined has picked yet. If the current question hasn't been
+  // translated into their language before, warm it now, at join time —
+  // a few extra seconds on their JOIN click, not on their answering
+  // window once the question (or the current one, if they're joining
+  // mid-question) is actually live and being timed.
+  if (translationEnabled && languageCode !== "en" && session.status === "live" && (session.phase === "question" || session.phase === "revealed")) {
+    const currentQuestion = session.quiz_snapshot.questions[session.current_question_index];
+    if (currentQuestion) {
+      await ensureQuestionTranslated(params.id, session.current_question_index, currentQuestion, languageCode).catch(() => {});
+    }
+  }
 
   // Look for an existing participant in THIS session matching mobile (or
   // email too, if one was given) before creating a new one.

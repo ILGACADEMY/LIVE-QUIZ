@@ -1,5 +1,6 @@
 import { requireAdmin } from "@/lib/require-admin";
 import QuizLibrary from "@/components/admin/QuizLibrary";
+import AiConnectionTest from "@/components/admin/AiConnectionTest";
 
 export default function AdminHome() {
   requireAdmin();
@@ -12,6 +13,7 @@ export default function AdminHome() {
             <h1 className="font-display text-3xl italic">My Quizzes</h1>
           </div>
         </div>
+        <AiConnectionTest />
         <QuizLibrary />
       </div>
     </main>
