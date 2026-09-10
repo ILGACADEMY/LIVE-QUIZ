@@ -49,6 +49,13 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const [dialSeconds, setDialSeconds] = useState(0);
   const [answeredSoFar, setAnsweredSoFar] = useState(0);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [waitingInfo, setWaitingInfo] = useState<{
+    quizTitle: string;
+    totalQuestions: number;
+    scoringMode: "standard" | "speed_bonus";
+    passMarkPercent: number;
+    questionTimerSeconds: number;
+  } | null>(null);
   const startsAtRef = useRef<number | null>(null);
   const submittingRef = useRef(false);
 
@@ -80,6 +87,13 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       return;
     }
     if (data.phase === "waiting") {
+      setWaitingInfo({
+        quizTitle: data.quizTitle,
+        totalQuestions: data.totalQuestions,
+        scoringMode: data.scoringMode,
+        passMarkPercent: data.passMarkPercent,
+        questionTimerSeconds: data.questionTimerSeconds
+      });
       setPhase((p) => (p === "countdown" ? p : "waiting"));
       return;
     }
@@ -261,7 +275,20 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         <p className="text-gold text-xs tracking-[0.2em] mb-4">YOU&rsquo;RE IN</p>
         <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
-        <p className="text-parchment/50">Waiting for the instructor to start…</p>
+        <p className="text-parchment/50 mb-6">Waiting for the instructor to start…</p>
+
+        {waitingInfo && (
+          <div className="case-panel p-5 max-w-xs text-left">
+            <p className="field-label mb-3 text-center">How scoring works</p>
+            <p className="text-sm text-parchment/70 leading-relaxed mb-2">
+              {waitingInfo.totalQuestions} question{waitingInfo.totalQuestions !== 1 ? "s" : ""}, {waitingInfo.questionTimerSeconds}s each.{" "}
+              {waitingInfo.scoringMode === "speed_bonus"
+                ? "Answer correctly AND quickly for bonus points — the faster a correct answer, the more it's worth."
+                : "Each correct answer earns points — no rush, just answer before time runs out."}
+            </p>
+            <p className="text-sm text-parchment/50">Pass mark: {waitingInfo.passMarkPercent}%</p>
+          </div>
+        )}
       </main>
     );
   }

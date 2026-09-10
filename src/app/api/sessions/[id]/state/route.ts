@@ -303,7 +303,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   if (session.status !== "live") {
-    return NextResponse.json({ status: session.status, phase: "waiting" });
+    return NextResponse.json({
+      status: session.status,
+      phase: "waiting",
+      quizTitle: session.quiz_snapshot.quiz.title,
+      totalQuestions,
+      scoringMode: session.quiz_snapshot.quiz.scoring_mode,
+      passMarkPercent: session.quiz_snapshot.quiz.pass_mark_percent,
+      speedBonusWindowSeconds: session.quiz_snapshot.quiz.speed_bonus_window_seconds,
+      questionTimerSeconds: session.quiz_snapshot.quiz.question_timer_seconds ?? 20
+    });
   }
 
   if (session.phase === "finished") {

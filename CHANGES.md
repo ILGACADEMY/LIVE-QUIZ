@@ -945,6 +945,18 @@ intent all along.
 
 Files: `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 43. Scoring explanation on the waiting screen
+
+Added a "How scoring works" card to the waiting screen participants
+already sit on after joining, before the presenter starts — rather than
+inserting a whole new extra step/screen for this. Shows question count,
+per-question time, pass mark, and a plain-language explanation of
+whichever scoring mode the quiz actually uses (speed bonus vs standard),
+pulled live from that quiz's real settings rather than generic text.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`,
+`src/app/play/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
