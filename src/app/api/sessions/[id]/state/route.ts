@@ -222,6 +222,16 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         ]
       };
 
+      // Deliberately NOT computed while phase === 'question': showing a
+      // live per-option breakdown on the presenter's screen -- which is
+      // what's actually projected for the whole room to see -- risks a
+      // bandwagon effect. Someone still deciding could glance up and
+      // shift toward whatever's currently winning, which would corrupt
+      // the very thing a knowledge check is supposed to measure. Kahoot
+      // and Mentimeter both avoid this the same way: a neutral
+      // answered/pending count is fine to show live (see counts.answered
+      // elsewhere in this response), but the actual distribution only
+      // ever appears once answers are locked and it's time to reveal.
       if (session.phase === "revealed") {
         const { data: answerRows } = await supabaseAdmin
           .from("answers")
@@ -236,13 +246,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         });
         const totalAnswers = answerRows?.length ?? 0;
 
-        presenterQuestion.correctOption = rawQuestion.correct_option;
-        presenterQuestion.explanation = rawQuestion.explanation;
         presenterQuestion.distribution = (["A", "B", "C", "D"] as const).map((key) => ({
           key,
           count: tally[key],
           percent: totalAnswers > 0 ? Math.round((tally[key] / totalAnswers) * 100) : 0
         }));
+
+        presenterQuestion.correctOption = rawQuestion.correct_option;
+        presenterQuestion.explanation = rawQuestion.explanation;
       }
     }
 

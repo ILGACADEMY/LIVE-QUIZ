@@ -13,7 +13,9 @@ const config: Config = {
         gold: "#C9A24B",
         "gold-dim": "#8A6E33",
         bronze: "#8A5A32",
-        crimson: "#8C3B2E"
+        crimson: "#8C3B2E",
+        sapphire: "#3E5C76",
+        verdigris: "#4A6B5A"
       },
       fontFamily: {
         display: ["var(--font-fraunces)", "serif"],

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
+import ResponseDistributionChart from "@/components/admin/ResponseDistributionChart";
 
 interface AdminLeaderboardRow {
   rank: number;
@@ -204,17 +205,17 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
       : "LIVE";
 
   return (
-    <main className="min-h-screen px-6 py-10 md:px-12">
+    <main className="min-h-screen px-6 py-6 md:px-10">
       <div className="max-w-4xl mx-auto">
-        <button onClick={() => router.push("/admin")} className="text-parchment/50 text-sm mb-6 hover:text-gold">
+        <button onClick={() => router.push("/admin")} className="text-parchment/50 text-sm mb-4 hover:text-gold">
           ← My Quizzes
         </button>
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
           <div>
-            <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-2">{phaseLabel}</p>
-            <h1 className="font-display italic text-3xl">{state.quizTitle}</h1>
-            <p className="text-parchment/40 text-xs mt-2 font-dial">Session {sessionId}</p>
+            <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-1">{phaseLabel}</p>
+            <h1 className="font-display italic text-2xl">{state.quizTitle}</h1>
+            <p className="text-parchment/40 text-xs mt-1 font-dial">Session {sessionId}</p>
           </div>
           <div className="flex gap-3">
             {state.status === "waiting" && (
@@ -250,21 +251,14 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           </div>
         </div>
 
-        {state.status === "live" && (
-          <p className="text-parchment/30 text-xs -mt-6 mb-8">
-            Tip: a presentation clicker's next-slide button (Right Arrow / Page Down / Space) works here too — no
-            setup needed.
-          </p>
-        )}
-
         {state.status === "waiting" && (
-          <section className="case-panel p-10 mb-8 flex flex-col md:flex-row items-center gap-10">
-            <div className="bg-ivory p-4 shrink-0">
-              <QRCodeSVG value={joinUrl} size={340} bgColor="#F3EDE1" fgColor="#12100D" />
+          <section className="case-panel p-6 mb-5 flex flex-col md:flex-row items-center gap-8">
+            <div className="bg-ivory p-3 shrink-0">
+              <QRCodeSVG value={joinUrl} size={220} bgColor="#F3EDE1" fgColor="#12100D" />
             </div>
             <div>
               <MeridianWordmark size="small" />
-              <p className="font-display italic text-2xl mt-4 mb-2">Scan to join</p>
+              <p className="font-display italic text-xl mt-3 mb-1">Scan to join</p>
               <p className="text-parchment/50 text-sm break-all mb-1">{joinUrl}</p>
               {state.shortCode && (
                 <p className="text-parchment/50 text-sm mb-1">
@@ -272,7 +266,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                   <span className="font-dial text-gold text-lg tracking-widest">{state.shortCode}</span>
                 </p>
               )}
-              <p className="text-parchment/40 text-xs mb-4">No app, account, or password needed.</p>
+              <p className="text-parchment/40 text-xs mb-3">No app, account, or password needed.</p>
               <button onClick={() => setQrFullscreen(true)} className="btn-ghost text-sm px-4 py-2">
                 Show QR full screen
               </button>
@@ -282,6 +276,14 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
         {qrFullscreen && (
           <div className="fixed inset-0 z-50 bg-charcoal flex flex-col items-center justify-center gap-8 p-8">
+            <button
+              onClick={() => setQrFullscreen(false)}
+              className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center border border-hairline text-parchment/60 hover:text-gold hover:border-gold text-2xl leading-none"
+              title="Close"
+              aria-label="Close"
+            >
+              ×
+            </button>
             <MeridianWordmark />
             <div className="bg-ivory p-8">
               <QRCodeSVG value={joinUrl} size={520} bgColor="#F3EDE1" fgColor="#12100D" />
@@ -292,13 +294,10 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                 {joinUrl.split("/join")[0]}/join
               </p>
             )}
-            <button onClick={() => setQrFullscreen(false)} className="btn-ghost px-6 py-3">
-              Close
-            </button>
           </div>
         )}
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
           <Stat label="Joined" value={state.counts.joined} />
           <Stat label="Completed" value={state.counts.completed} />
           {/* Answered/pending are scoped to whichever question is
@@ -308,16 +307,16 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           <Stat label="Pending" value={state.counts.pending} />
         </div>
 
-        <div className="case-panel p-6 grid grid-cols-2 md:grid-cols-3 gap-6 text-sm mb-6">
+        <div className="case-panel px-6 py-3 grid grid-cols-2 md:grid-cols-3 gap-6 text-sm mb-4">
           <div>
-            <p className="field-label mb-1">Question</p>
-            <p className="font-dial text-lg">
+            <p className="field-label mb-0.5">Question</p>
+            <p className="font-dial text-base">
               {state.status === "waiting" ? "—" : `${state.questionNumber} of ${state.totalQuestions}`}
             </p>
           </div>
           <div>
-            <p className="field-label mb-1">Phase</p>
-            <p className="font-dial text-lg capitalize">{state.status === "waiting" ? "Not started" : state.phase}</p>
+            <p className="field-label mb-0.5">Phase</p>
+            <p className="font-dial text-base capitalize">{state.status === "waiting" ? "Not started" : state.phase}</p>
           </div>
         </div>
 
@@ -327,51 +326,30 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             picture lives here, and again afterward on each participant's
             results/download page. */}
         {state.question && (
-          <div className="case-panel p-6 mb-6">
-            <p className="text-lg font-medium mb-4">{state.question.questionText}</p>
+          <div className="case-panel p-5 mb-4">
+            <p className="text-lg font-medium mb-3">{state.question.questionText}</p>
             {state.question.imageUrl &&
               (state.question.mediaType === "video" ? (
-                <video src={state.question.imageUrl} controls className="w-full max-h-72 object-contain bg-black mb-4" />
+                <video src={state.question.imageUrl} controls className="w-full max-h-56 object-contain bg-black mb-3" />
               ) : (
-                <img src={state.question.imageUrl} alt="" className="w-full max-h-72 object-cover mb-4" />
+                <img src={state.question.imageUrl} alt="" className="w-full max-h-56 object-cover mb-3" />
               ))}
 
-            <div className="flex flex-col gap-2">
-              {state.question.options.map((opt) => {
-                const dist = state.question!.distribution?.find((d) => d.key === opt.key);
-                const isCorrect = state.question!.correctOption === opt.key;
-                return (
-                  <div key={opt.key} className="relative">
-                    <div
-                      className={`flex items-center justify-between px-4 py-3 border text-sm relative overflow-hidden ${
-                        isCorrect ? "border-gold" : "border-hairline"
-                      }`}
-                    >
-                      {dist && (
-                        <div
-                          className="absolute inset-y-0 left-0 bg-gold/10"
-                          style={{ width: `${dist.percent}%` }}
-                          aria-hidden
-                        />
-                      )}
-                      <span className="relative z-10">
-                        <span className="text-parchment/40 mr-2">{opt.key}</span>
-                        {opt.text}
-                        {isCorrect && <span className="text-gold ml-2">✓ Correct</span>}
-                      </span>
-                      {dist && (
-                        <span className="relative z-10 font-dial text-xs text-parchment/60 shrink-0 ml-3">
-                          {dist.count} · {dist.percent}%
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            {state.phase === "revealed" ? (
+              <ResponseDistributionChart
+                options={state.question.options}
+                distribution={state.question.distribution}
+                correctOption={state.question.correctOption}
+              />
+            ) : (
+              <p className="text-parchment/30 text-xs text-center py-4">
+                Results appear here once answers are revealed — kept hidden while the question is live so nobody's
+                answer is influenced by what others are picking.
+              </p>
+            )}
 
             {state.question.explanation && (
-              <p className="text-sm text-parchment/60 mt-4 border-t border-hairline pt-4">{state.question.explanation}</p>
+              <p className="text-sm text-parchment/60 mt-3 border-t border-hairline pt-3">{state.question.explanation}</p>
             )}
           </div>
         )}
@@ -527,9 +505,9 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
 function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
   return (
-    <div className="case-panel p-5">
-      <p className="field-label mb-2">{label}</p>
-      <p className={`font-dial text-3xl ${highlight ? "text-gold" : ""}`}>{value}</p>
+    <div className="case-panel p-3">
+      <p className="field-label mb-1">{label}</p>
+      <p className={`font-dial text-2xl ${highlight ? "text-gold" : ""}`}>{value}</p>
     </div>
   );
 }

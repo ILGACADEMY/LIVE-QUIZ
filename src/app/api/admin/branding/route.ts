@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 
+// GET /api/admin/branding — current logo URL, if any set.
+export async function GET(req: NextRequest) {
+  if (!isAdminRequestAuthorized(req)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const { data } = await supabaseAdmin.from("app_settings").select("logo_url").limit(1).maybeSingle();
+  return NextResponse.json({ logoUrl: data?.logo_url ?? null });
+}
+
 /**
  * POST /api/admin/branding
  * Body: { logoUrl: string }

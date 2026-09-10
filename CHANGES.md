@@ -760,6 +760,178 @@ the start of its text, that jumps straight there.
 
 Files: `src/components/admin/QuizPreview.tsx`.
 
+## 34. Company logo — finally wired up end to end
+
+The backend for this (a settings table, a display component already
+included on every page via the root layout) was actually built a while
+back but never finished — there was no way to actually *set* a logo,
+since no upload screen existed. Fixed: a "Company logo" section on the
+admin home page, using the same direct-to-storage upload as question
+images. Upload once, and it appears at the top of every page — join
+screen, presenter view, results, leaderboard — automatically, no other
+changes needed.
+
+Files: `src/components/admin/BrandingSettings.tsx` (new),
+`src/app/api/admin/branding/route.ts` (added GET), `src/app/admin/page.tsx`.
+
+## 35. New: "Test file storage" diagnostic — for the still-unresolved upload issue
+
+Image/video upload has been reported broken multiple times, and every
+code review of the actual upload path has come back clean. Rather than
+guess a fifth time, built the same kind of real diagnostic that
+successfully found the AI model bug: this one actually performs the full
+real round trip outside the question editor — checks the storage bucket
+exists, creates a signed upload URL, uploads a real (tiny) test file with
+it, confirms the result is publicly readable, then cleans up — and
+reports exactly which step failed, if any, with Supabase's actual error
+message. This should finally give a definitive answer instead of another
+guess.
+
+Files: `src/app/api/admin/test-storage/route.ts` (new),
+`src/components/admin/StorageConnectionTest.tsx` (new),
+`src/app/admin/page.tsx`.
+
+## 36. QR full-screen: proper X close button
+
+The full-screen QR overlay only had a "Close" button at the bottom
+before — added a conventional × icon in the top-right corner too,
+matching how full-screen overlays are normally closed.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
+## 37. Presenter view: reduced vertical space to fit better on a 16:9 screen
+
+Tightened padding and margins throughout the live presenter view —
+removed a redundant line of text (the presentation-clicker tip, which
+was already available as a hover tooltip on the same button), reduced
+section spacing, and shrunk the stat cards and question-info panel.
+**Honest caveat:** this meaningfully reduces how much scrolling is
+needed, but a genuinely long question with four long answer options can
+still be more content than any fixed 1920×1080 screen can show without
+scrolling at all — this wasn't rebuilt as a strict "guaranteed to always
+fit" layout, since that would require either much smaller text (hurting
+projector readability, the opposite of the actual goal) or hiding real
+content. If a specific screen/quiz combination is still overflowing
+after this, tell me the specifics and I can look at that case directly.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
+## 38. Import questions from Word — no more manual retyping
+
+New "Import from Word / text" button next to "+ Add question" in the
+quiz editor. The workflow:
+
+1. Download a template (one click) — a plain-text file showing the
+   exact layout: a question line, four lettered options, a correct
+   answer, and optional explanation/category/difficulty/topic fields.
+2. Open it in Word, fill it in with real content, keeping the same
+   layout.
+3. Select all, copy, paste into the import box in the app.
+4. Preview shows exactly what was understood, flags anything it wasn't
+   sure about, before anything is actually added.
+
+**Deliberately text-paste-based, not a .docx file upload** — parsing an
+actual Word binary file reliably across everyone's different formatting
+habits (tables, unusual styles, autocorrect quirks) is much more fragile
+than parsing plain text, and copy-paste from Word into a browser already
+strips all of that down to plain text automatically, which is exactly
+what the parser wants. This also means it works from *any* source, not
+just Word — plain email text, Google Docs, anything.
+
+**Tested against messier real input, not just the clean template** — it
+correctly handles missing blank lines between questions, lowercase
+labels ("a)" vs "A)"), and mixed numbering styles ("Q1:" vs "Q2."),
+confirmed by actually running the parser against deliberately imperfect
+input before shipping this, not just the ideal case.
+
+Files: `src/lib/question-import.ts` (new),
+`src/components/admin/ImportQuestionsModal.tsx` (new),
+`src/components/admin/QuizEditor.tsx`.
+
+## 39. Simple mode — a genuinely simpler quiz editor, without forking into a separate app
+
+New "Show advanced settings" toggle at the top of the quiz editor,
+visible from both tabs. Off by default (Simple mode):
+
+- **Settings tab** shows only Time limit, Pass mark, Leaderboard, and AI
+  feedback. Translation, randomization, back-navigation, scoring mode
+  (speed bonus), the live-session question timer, and "after answering"
+  behavior are hidden — not removed, just tucked away, using sensible
+  defaults (standard scoring, 20s timer, English only, no
+  randomization) until you actually want to touch them.
+- **Question form** shows only the question text, four answers, and
+  which one's correct. Image/video upload, wrong-answer feedback per
+  option, and category/difficulty/learning-topic are hidden.
+
+Flipping the toggle on reveals everything exactly as it was, with
+whatever values already existed underneath — nothing is reset, deleted,
+or lost when switching between the two views. This is deliberately one
+toggle on the same editor, not a second separate tool to build and
+maintain — the full data model and every existing feature (results
+category breakdowns, AI feedback, etc.) works unchanged either way,
+gracefully defaulting to a single "General" category when the
+category/topic fields are left blank in Simple mode.
+
+Files: `src/components/admin/QuizEditor.tsx`, `src/components/admin/QuestionEditor.tsx`.
+
+## 40. Redesigned the response chart — lively, colorful, and live during the question too, not just at reveal
+
+You shared a Mentimeter screenshot as a reference for what "lively and
+colorful" should look like — rather than copy Menti's bright SaaS-blue
+palette directly (which would clash badly with this app's dark,
+gold-accented premium look), built an equivalent using this brand's own
+jewel-tone colors, added two new ones (`sapphire`, `verdigris`) to the
+existing bronze/crimson/gold palette specifically for this.
+
+- **Vertical bar chart** (like the reference) instead of the old
+  horizontal fill-bars — easier to compare at a glance from across a
+  room, with a large animated count above each bar.
+- **Live during the question, not just after reveal** — bars now fill in
+  in real time as answers arrive while the timer is still running (this
+  needed a real backend change: vote counts per option are now sent to
+  the presenter continuously, previously only after reveal). All bars
+  share the same neutral colors during this phase — nothing hints at
+  which one is correct yet.
+- **The reveal moment is an actual moment**, not just a static label: the
+  correct bar's color animates from its neutral tone to gold, with a
+  checkmark badge appearing — the same height/color transition
+  mechanism, just triggered by new data arriving.
+- Colors are hard-coded literal Tailwind classes (`bg-bronze`,
+  `bg-crimson`, etc.), not dynamically built strings — a subtlety that
+  matters because Tailwind's build step can't detect classes assembled
+  at runtime, which would have silently rendered unstyled.
+
+Files: `src/components/admin/ResponseDistributionChart.tsx` (new),
+`src/components/admin/AdminSessionDashboard.tsx`,
+`src/app/api/sessions/[id]/state/route.ts`, `tailwind.config.ts`.
+
+## 41. Correction to item 40: reverted live-during-question distribution — bandwagon effect risk
+
+You raised a real concern about item 40's live-vote-chart, and you were
+right: the presenter's screen is what's actually projected for the whole
+room to see, so showing a live per-option breakdown while a question is
+still open risks a bandwagon effect — someone genuinely unsure could
+glance up and shift toward whatever's currently winning, rather than
+answering from actual knowledge. That would quietly inflate the group's
+apparent understanding while corrupting the very thing the quiz is
+supposed to measure. Kahoot and Mentimeter both avoid this the same way,
+for the same reason.
+
+**Reverted:** the per-option distribution is computed and shown only
+once a question is revealed, exactly as it worked before item 40. While
+a question is still live, the presenter sees a neutral note instead of
+an empty chart, and can still watch the plain answered/pending *count*
+(no per-option breakdown) via the existing stat cards elsewhere on the
+dashboard — that neutral progress indicator was never the problem, only
+showing which specific answer was pulling ahead was.
+
+The colorful vertical bar chart itself, and the reveal-moment color
+animation, are unchanged and still an improvement — they just only
+appear at the correct moment again.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

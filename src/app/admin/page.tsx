@@ -1,6 +1,8 @@
 import { requireAdmin } from "@/lib/require-admin";
 import QuizLibrary from "@/components/admin/QuizLibrary";
 import AiConnectionTest from "@/components/admin/AiConnectionTest";
+import StorageConnectionTest from "@/components/admin/StorageConnectionTest";
+import BrandingSettings from "@/components/admin/BrandingSettings";
 
 export default function AdminHome() {
   requireAdmin();
@@ -14,6 +16,8 @@ export default function AdminHome() {
           </div>
         </div>
         <AiConnectionTest />
+        <StorageConnectionTest />
+        <BrandingSettings />
         <QuizLibrary />
       </div>
     </main>

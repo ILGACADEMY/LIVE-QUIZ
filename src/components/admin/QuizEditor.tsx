@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Quiz, ScoringMode, AfterAnswerMode } from "@/lib/types";
 import Toggle from "@/components/shared/Toggle";
 import QuestionEditor, { EditableQuestion, blankQuestion } from "@/components/admin/QuestionEditor";
+import ImportQuestionsModal from "@/components/admin/ImportQuestionsModal";
 
 const SPEED_WINDOWS = [5, 10, 15, 20, 30];
 const MAX_QUESTIONS = 50;
@@ -21,6 +22,8 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [customWindow, setCustomWindow] = useState(false);
   const [customTimer, setCustomTimer] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [advancedMode, setAdvancedMode] = useState(false);
 
   useEffect(() => {
     fetch(`/api/quizzes/${quizId}`)
@@ -51,6 +54,16 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
       setActiveIndex(next.length - 1);
       return next;
     });
+  }
+  function importParsedQuestions(parsed: EditableQuestion[]) {
+    setQuestions((qs) => {
+      const room = MAX_QUESTIONS - qs.length;
+      const toAdd = parsed.slice(0, Math.max(0, room));
+      const next = [...qs, ...toAdd];
+      if (toAdd.length > 0) setActiveIndex(qs.length); // jump to the first newly-imported question
+      return next;
+    });
+    setShowImport(false);
   }
   function updateQuestion(i: number, q: EditableQuestion) {
     setQuestions((qs) => qs.map((old, idx) => (idx === i ? q : old)));
@@ -138,6 +151,29 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
           placeholder="Quiz title"
         />
 
+        {/* One toggle affecting both tabs: Simple mode hides everything
+            beyond the true essentials — question text, 4 options, a
+            correct answer, time limit, pass mark, leaderboard, AI
+            feedback — behind sensible defaults (standard scoring, 20s
+            timer, English only, no randomization). Nothing is deleted or
+            reset when switching modes; flipping this on just reveals the
+            same settings underneath, already there. */}
+        <div className="flex items-center gap-3 mb-4">
+          <button
+            onClick={() => setAdvancedMode((v) => !v)}
+            className={`text-xs px-3 py-1.5 border transition-colors ${
+              advancedMode ? "border-gold text-gold" : "border-hairline text-parchment/50 hover:border-gold/50"
+            }`}
+          >
+            {advancedMode ? "✓ Advanced settings shown" : "Show advanced settings"}
+          </button>
+          {!advancedMode && (
+            <p className="text-parchment/30 text-xs">
+              Simple mode — scoring, timers, translation, and randomization are using sensible defaults, hidden for now.
+            </p>
+          )}
+        </div>
+
         {/* TABS */}
         <div className="flex gap-6 border-b border-hairline mt-6 mb-6">
           {(["questions", "settings"] as Tab[]).map((t) => (
@@ -190,30 +226,38 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
               </div>
               <Toggle label="Leaderboard" checked={quiz.leaderboard_enabled} onChange={(v) => setQuizField("leaderboard_enabled", v)} />
               <Toggle label="AI feedback" checked={quiz.ai_feedback_enabled} onChange={(v) => setQuizField("ai_feedback_enabled", v)} />
-              <Toggle
-                label="Multi-language translation"
-                checked={quiz.translation_enabled}
-                onChange={(v) => setQuizField("translation_enabled", v)}
-              />
-              {quiz.translation_enabled && (
-                <p className="text-xs text-parchment/40 -mt-2 mb-2 ml-1">
-                  Participants will see a language picker on the join screen. Each question is translated by AI on
-                  first use per language — this has a real, ongoing AI cost, unlike the other toggles here.
-                </p>
-              )}
-              {!quiz.translation_enabled && (
-                <p className="text-xs text-parchment/30 -mt-2 mb-2 ml-1">
-                  Off by default to avoid AI translation costs. When off, every participant sees this quiz in
-                  English only — the language picker is hidden on the join screen entirely.
-                </p>
-              )}
-              <Toggle label="Randomize questions" checked={quiz.randomize_questions} onChange={(v) => setQuizField("randomize_questions", v)} />
-              <Toggle label="Randomize answers" checked={quiz.randomize_answers} onChange={(v) => setQuizField("randomize_answers", v)} />
-              <Toggle label="Allow back navigation" checked={quiz.back_navigation_enabled} onChange={(v) => setQuizField("back_navigation_enabled", v)} />
             </section>
 
-            <section className="case-panel p-6 mb-6">
-              <p className="field-label mb-4">Scoring mode</p>
+            {advancedMode && (
+              <section className="case-panel p-6 mb-6">
+                <p className="field-label mb-4">Advanced quiz behavior</p>
+                <Toggle
+                  label="Multi-language translation"
+                  checked={quiz.translation_enabled}
+                  onChange={(v) => setQuizField("translation_enabled", v)}
+                />
+                {quiz.translation_enabled && (
+                  <p className="text-xs text-parchment/40 -mt-2 mb-2 ml-1">
+                    Participants will see a language picker on the join screen. Each question is translated by AI on
+                    first use per language — this has a real, ongoing AI cost, unlike the other toggles here.
+                  </p>
+                )}
+                {!quiz.translation_enabled && (
+                  <p className="text-xs text-parchment/30 -mt-2 mb-2 ml-1">
+                    Off by default to avoid AI translation costs. When off, every participant sees this quiz in
+                    English only — the language picker is hidden on the join screen entirely.
+                  </p>
+                )}
+                <Toggle label="Randomize questions" checked={quiz.randomize_questions} onChange={(v) => setQuizField("randomize_questions", v)} />
+                <Toggle label="Randomize answers" checked={quiz.randomize_answers} onChange={(v) => setQuizField("randomize_answers", v)} />
+                <Toggle label="Allow back navigation" checked={quiz.back_navigation_enabled} onChange={(v) => setQuizField("back_navigation_enabled", v)} />
+              </section>
+            )}
+
+            {advancedMode && (
+              <>
+                <section className="case-panel p-6 mb-6">
+                  <p className="field-label mb-4">Scoring mode</p>
               <div className="grid grid-cols-2 gap-3 mb-5">
                 {(["standard", "speed_bonus"] as ScoringMode[]).map((mode) => (
                   <button
@@ -337,6 +381,8 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                 ))}
               </div>
             </section>
+              </>
+            )}
           </div>
         )}
 
@@ -347,9 +393,12 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
               <button
                 onClick={addQuestion}
                 disabled={questions.length >= MAX_QUESTIONS}
-                className="btn-gold w-full mb-4 text-sm py-2.5"
+                className="btn-gold w-full mb-2 text-sm py-2.5"
               >
                 + Add question
+              </button>
+              <button onClick={() => setShowImport(true)} className="btn-ghost w-full mb-4 text-sm py-2.5">
+                Import from Word / text
               </button>
               <div className="case-panel max-h-[70vh] overflow-y-auto divide-y divide-hairline">
                 {questions.length === 0 && (
@@ -387,6 +436,7 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                   onDelete={() => deleteQuestion(activeIndex)}
                   onMoveUp={() => moveQuestion(activeIndex, -1)}
                   onMoveDown={() => moveQuestion(activeIndex, 1)}
+                  advancedMode={advancedMode}
                 />
               )}
             </div>
@@ -405,6 +455,14 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
           </button>
         </div>
       </div>
+
+      {showImport && (
+        <ImportQuestionsModal
+          remainingSlots={MAX_QUESTIONS - questions.length}
+          onImport={importParsedQuestions}
+          onClose={() => setShowImport(false)}
+        />
+      )}
     </main>
   );
 }

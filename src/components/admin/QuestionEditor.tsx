@@ -60,7 +60,8 @@ export default function QuestionEditor({
   onDuplicate,
   onDelete,
   onMoveUp,
-  onMoveDown
+  onMoveDown,
+  advancedMode = true
 }: {
   index: number;
   total: number;
@@ -70,6 +71,7 @@ export default function QuestionEditor({
   onDelete: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  advancedMode?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -159,46 +161,50 @@ export default function QuestionEditor({
         placeholder="e.g. Which material is used for the VR34B's caseback gasket?"
       />
 
-      <label className="field-label block mb-2">Image or video (optional)</label>
-      <div className="flex items-center gap-4 mb-2">
-        {question.image_url && question.media_type === "video" ? (
-          <video
-            src={question.image_url}
-            controls
-            className="w-32 h-20 object-cover border border-hairline bg-black"
-          />
-        ) : question.image_url ? (
-          <img src={question.image_url} alt="" className="w-20 h-20 object-cover border border-hairline" />
-        ) : null}
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
-          className="hidden"
-          onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
-        />
-        <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
-          {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
-        </button>
-        {question.image_url && (
-          <button
-            type="button"
-            onClick={() => {
-              set("image_url", null);
-              set("media_type", "image");
-            }}
-            className="text-xs text-crimson/80 hover:text-crimson"
-          >
-            Remove
-          </button>
-        )}
-      </div>
-      {uploadError && (
-        <p className="text-xs text-crimson mb-3">{uploadError}</p>
+      {advancedMode && (
+        <>
+          <label className="field-label block mb-2">Image or video (optional)</label>
+          <div className="flex items-center gap-4 mb-2">
+            {question.image_url && question.media_type === "video" ? (
+              <video
+                src={question.image_url}
+                controls
+                className="w-32 h-20 object-cover border border-hairline bg-black"
+              />
+            ) : question.image_url ? (
+              <img src={question.image_url} alt="" className="w-20 h-20 object-cover border border-hairline" />
+            ) : null}
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+              className="hidden"
+              onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+            />
+            <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
+              {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
+            </button>
+            {question.image_url && (
+              <button
+                type="button"
+                onClick={() => {
+                  set("image_url", null);
+                  set("media_type", "image");
+                }}
+                className="text-xs text-crimson/80 hover:text-crimson"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+          {uploadError && (
+            <p className="text-xs text-crimson mb-3">{uploadError}</p>
+          )}
+          <p className="text-xs text-parchment/50 mb-5">
+            Images up to 5MB (JPG/PNG/WEBP). Videos up to 50MB (MP4/WEBM/MOV) — plays with sound on the participant's device, same as any video player.
+          </p>
+        </>
       )}
-      <p className="text-xs text-parchment/50 mb-5">
-        Images up to 5MB (JPG/PNG/WEBP). Videos up to 50MB (MP4/WEBM/MOV) — plays with sound on the participant's device, same as any video player.
-      </p>
 
       <div className="grid md:grid-cols-2 gap-4 mb-5">
         {OPTIONS.map(({ key, field }) => (
@@ -240,7 +246,9 @@ export default function QuestionEditor({
         placeholder="Shown on the results screen, and used as the source of truth for AI feedback."
       />
 
-      <details className="mb-5">
+      {advancedMode && (
+        <>
+          <details className="mb-5">
         <summary className="field-label cursor-pointer mb-3">Wrong-answer feedback (optional, per option)</summary>
         <div className="grid md:grid-cols-2 gap-4 mt-3">
           {OPTIONS.map(({ key, feedbackField }) => (
@@ -282,7 +290,9 @@ export default function QuestionEditor({
             placeholder="e.g. Chronograph engines"
           />
         </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
