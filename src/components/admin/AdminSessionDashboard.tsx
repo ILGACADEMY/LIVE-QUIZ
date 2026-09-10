@@ -342,10 +342,21 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                 correctOption={state.question.correctOption}
               />
             ) : (
-              <p className="text-parchment/30 text-xs text-center py-4">
-                Results appear here once answers are revealed — kept hidden while the question is live so nobody's
-                answer is influenced by what others are picking.
-              </p>
+              // Options are always shown, live — only the vote counts and
+              // which one's correct wait for reveal (see item 41: showing
+              // those live, on a screen the whole room watches, risks a
+              // bandwagon effect).
+              <div className="flex flex-col gap-2 mb-2">
+                {state.question.options.map((opt) => (
+                  <div key={opt.key} className="px-4 py-2.5 border border-hairline text-sm">
+                    <span className="text-parchment/40 mr-2">{opt.key}</span>
+                    {opt.text}
+                  </div>
+                ))}
+                <p className="text-parchment/30 text-xs text-center pt-2">
+                  Results appear here once answers are revealed.
+                </p>
+              </div>
             )}
 
             {state.question.explanation && (

@@ -932,6 +932,19 @@ appear at the correct moment again.
 Files: `src/app/api/sessions/[id]/state/route.ts`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 42. Fixed a real regression from item 41: options disappeared during the live question
+
+Item 41 correctly hid the vote counts/bars while a question is live, but
+did it by hiding the *entire* options display — which meant the four
+answer options themselves briefly stopped showing on the presenter's
+screen at all while a question was active, not just the vote counts.
+Fixed: options are now always visible during the live question (as
+plain text, no bars, no numbers) — only the vote breakdown and the
+correct-answer highlight still wait for reveal, which was the actual
+intent all along.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
