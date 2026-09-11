@@ -6,6 +6,7 @@ import { OptionKey } from "@/lib/types";
 import AnswerGrid from "@/components/participant/AnswerGrid";
 import CountdownDial from "@/components/participant/CountdownDial";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
 type Phase = "loading" | "waiting" | "countdown" | "question" | "locked" | "revealed" | "finished" | "ended" | "error";
 
@@ -55,6 +56,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     scoringMode: "standard" | "speed_bonus";
     passMarkPercent: number;
     questionTimerSeconds: number;
+    instructionBullets: string[];
   } | null>(null);
   const startsAtRef = useRef<number | null>(null);
   const submittingRef = useRef(false);
@@ -92,7 +94,8 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         totalQuestions: data.totalQuestions,
         scoringMode: data.scoringMode,
         passMarkPercent: data.passMarkPercent,
-        questionTimerSeconds: data.questionTimerSeconds
+        questionTimerSeconds: data.questionTimerSeconds,
+        instructionBullets: data.instructionBullets ?? []
       });
       setPhase((p) => (p === "countdown" ? p : "waiting"));
       return;
@@ -271,41 +274,32 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
 
   if (phase === "loading" || phase === "waiting") {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-        <p className="text-gold text-xs tracking-[0.2em] mb-4">YOU&rsquo;RE IN</p>
+      <main className="min-h-screen flex flex-col items-center justify-center px-6 py-10 text-center">
+        <MeridianWordmark size="small" />
+        <p className="text-gold text-xs tracking-[0.2em] mt-6 mb-4">YOU&rsquo;RE IN</p>
         <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
         <p className="text-parchment/50 mb-6">Waiting for the instructor to start…</p>
 
-        {waitingInfo && (
-          <div className="case-panel p-5 max-w-xs text-left">
+        {waitingInfo && waitingInfo.instructionBullets.length > 0 && (
+          <div className="case-panel p-6 max-w-xs text-left">
             <p className="field-label mb-3 text-center">Quiz instructions</p>
-            <ul className="text-sm text-parchment/70 leading-relaxed space-y-1.5 list-disc list-inside">
-              <li>
-                <span className="text-ivory font-medium">{waitingInfo.totalQuestions}</span> multiple-choice question
-                {waitingInfo.totalQuestions !== 1 ? "s" : ""}
-              </li>
-              <li>
-                <span className="text-ivory font-medium">{waitingInfo.questionTimerSeconds} seconds</span> per question
-              </li>
-              {waitingInfo.scoringMode === "speed_bonus" ? (
-                <>
-                  <li>
-                    Each correct answer = <span className="text-gold font-medium">1 point</span>
+            <ul className="text-base text-parchment/75 leading-relaxed space-y-2 list-disc list-inside">
+              {waitingInfo.instructionBullets.map((bullet, i) => {
+                const isLast = i === waitingInfo.instructionBullets.length - 1;
+                // The closing "Good luck!" line gets a distinct, warmer
+                // treatment — no bullet marker, set in the same elegant
+                // italic serif used for headings elsewhere, sized to
+                // stand apart as a genuine send-off rather than another
+                // line item.
+                return isLast ? (
+                  <li key={i} className="list-none -ml-5 font-display italic text-xl text-gold text-center pt-2">
+                    {bullet}
                   </li>
-                  <li>
-                    Answer fast for up to <span className="text-gold font-medium">10 bonus points</span> — answer
-                    right away for the full bonus; the bonus shrinks the longer you take, reaching 0 right at{" "}
-                    {waitingInfo.questionTimerSeconds}s
-                  </li>
-                </>
-              ) : (
-                <li>Each correct answer earns points — no rush, just answer before time runs out</li>
-              )}
-              <li>No penalty for a wrong answer — it's simply worth 0</li>
-              <li>
-                Pass mark: <span className="text-ivory font-medium">{waitingInfo.passMarkPercent}%</span>
-              </li>
+                ) : (
+                  <li key={i}>{bullet}</li>
+                );
+              })}
             </ul>
           </div>
         )}

@@ -40,12 +40,12 @@ export default function MeridianWordmark({ size = "large" }: { size?: "large" | 
           // Padding + a light background gives any uploaded logo real
           // contrast and a defined edge, the same trick the QR code
           // already uses for the same reason.
-          <div className="bg-ivory px-4 py-3 rounded-sm shadow-lg">
+          <div className="bg-ivory px-3 py-2 rounded-sm shadow-lg">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logoUrl}
               alt=""
-              className={size === "large" ? "h-20 md:h-24 w-auto object-contain" : "h-11 w-auto object-contain"}
+              className={size === "large" ? "h-24 md:h-28 w-auto object-contain" : "h-12 w-auto object-contain"}
             />
           </div>
         )}

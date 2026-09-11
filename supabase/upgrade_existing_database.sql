@@ -61,3 +61,12 @@ alter table question_translations add column if not exists explanation text;
 
 -- ============ optional mobile/email requirement per quiz ============
 alter table quizzes add column if not exists require_contact_info boolean not null default false;
+
+-- ============ translated waiting-screen instructions (one small cache entry per session+language) ============
+create table if not exists instruction_translations (
+  session_id     uuid not null references sessions(id) on delete cascade,
+  language_code  text not null,
+  bullets        jsonb not null,
+  created_at     timestamptz not null default now(),
+  primary key (session_id, language_code)
+);

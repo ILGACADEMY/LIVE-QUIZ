@@ -25,8 +25,7 @@ create table if not exists quizzes (
   speed_bonus_window_seconds int not null default 20,
   question_timer_seconds    int  not null default 20, -- how long each question stays open in a LIVE session (all scoring modes) before auto-reveal
   translation_enabled       boolean not null default false, -- OFF by default: AI translation costs money per question per language, so it only runs for quizzes that explicitly opt in
-  require_contact_info      boolean not null default false, -- OFF by default: mobile/email fields hidden on join for casual quizzes; turn on for a real competition needing duplicate-prevention
-  after_answer_mode         text not null default 'auto_advance'
+  require_contact_info      boolean not null default false, -- OFF by default: mobile/email fields hidden on join for casual quizzes; turn on for a real competition needing duplicate-prevention  after_answer_mode         text not null default 'auto_advance'
                               check (after_answer_mode in ('auto_advance', 'next_button')), -- used by Preview only; a live session is always presenter-controlled
   status                    text not null default 'draft'
                               check (status in ('draft', 'published')),
@@ -169,6 +168,19 @@ create table if not exists question_translations (
 );
 
 alter table question_translations enable row level security;
+
+-- Translated waiting-screen instructions — one small cache entry per
+-- session+language, same idea as question_translations above but for
+-- the fixed instructional text (question count, scoring rules, pass
+-- mark) rather than per-question content.
+create table if not exists instruction_translations (
+  session_id     uuid not null references sessions(id) on delete cascade,
+  language_code  text not null,
+  bullets        jsonb not null,
+  created_at     timestamptz not null default now(),
+  primary key (session_id, language_code)
+);
+alter table instruction_translations enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security

@@ -1051,6 +1051,36 @@ rather than waiting for its normal 2-second poll cycle.
 Files: `src/components/admin/PresenterTimer.tsx` (new),
 `src/components/admin/AdminSessionDashboard.tsx`, `src/app/globals.css`.
 
+## 48. Logo fills its box better, and the participant waiting screen: logo added, translated, reworded, bigger text
+
+- **Logo**: reduced the padding around it further and enlarged it, so it
+  fills the light background chip more fully rather than floating with
+  a lot of empty margin around it.
+- **Logo was genuinely missing** from the participant's own waiting
+  screen (the one showing "Quiz instructions" before start) — added it.
+- **The instructions are now actually translated** for non-English
+  participants — a real gap before: only question content was ever
+  wired to translation, this fixed text never was. Built the same
+  caching pattern as question translation (a small new table,
+  `instruction_translations`), so each session+language combination is
+  translated once and reused, not re-translated on every view.
+  **One trade-off worth knowing**: to make this translatable, the
+  bullets are now assembled once on the server as plain sentences
+  (rather than built client-side with inline bold/gold number styling)
+  — they read cleanly in every language, just without that extra inline
+  emphasis on the numbers specifically.
+- **Wording cleaned up**: "the bonus shrinks the longer you take" →
+  "the quicker you answer, the more bonus you earn." Removed the "it's
+  simply worth 0" clarifier — just "No penalty for a wrong answer" now.
+  Added a closing "Good luck!" line, set apart in the app's elegant
+  italic serif rather than as another bullet point.
+- **Font size increased** on this card for better readability.
+
+Files: `src/components/shared/MeridianWordmark.tsx`,
+`src/app/play/[sessionId]/page.tsx`,
+`src/app/api/sessions/[id]/state/route.ts`, `src/lib/ai.ts`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

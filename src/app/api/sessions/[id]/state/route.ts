@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession, PublicQuestion } from "@/lib/types";
-import { translateQuestion } from "@/lib/ai";
+import { translateQuestion, translateBullets } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
 import { broadcastSessionEvent } from "@/lib/realtime";
 
@@ -304,15 +304,57 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   if (session.status !== "live") {
+    const quiz = session.quiz_snapshot.quiz;
+    // Built once, server-side, so the exact same wording can be sent
+    // through translation for non-English participants — the client
+    // used to assemble these strings itself, which meant they could
+    // never be translated at all.
+    const englishBullets = [
+      `${totalQuestions} multiple-choice question${totalQuestions !== 1 ? "s" : ""}`,
+      `${quiz.question_timer_seconds ?? 20} seconds per question`,
+      quiz.scoring_mode === "speed_bonus"
+        ? "Each correct answer earns 1 point, plus up to 10 bonus points — the quicker you answer, the more bonus you earn"
+        : "Each correct answer earns points — no rush, just answer before time runs out",
+      "No penalty for a wrong answer",
+      `Pass mark: ${quiz.pass_mark_percent}%`,
+      "Good luck!"
+    ];
+
+    let translatedBullets: string[] | null = null;
+    if (participant.language !== "en" && quiz.translation_enabled) {
+      const { data: cached } = await supabaseAdmin
+        .from("instruction_translations")
+        .select("bullets")
+        .eq("session_id", params.id)
+        .eq("language_code", participant.language)
+        .maybeSingle();
+
+      if (cached) {
+        translatedBullets = cached.bullets as string[];
+      } else {
+        try {
+          translatedBullets = await translateBullets(languageName(participant.language), englishBullets);
+          await supabaseAdmin
+            .from("instruction_translations")
+            .upsert({ session_id: params.id, language_code: participant.language, bullets: translatedBullets }, { onConflict: "session_id,language_code" });
+        } catch (err) {
+          console.error("Instruction translation error, falling back to English:", err);
+          translatedBullets = null;
+        }
+      }
+    }
+
     return NextResponse.json({
       status: session.status,
       phase: "waiting",
-      quizTitle: session.quiz_snapshot.quiz.title,
+      quizTitle: quiz.title,
       totalQuestions,
-      scoringMode: session.quiz_snapshot.quiz.scoring_mode,
-      passMarkPercent: session.quiz_snapshot.quiz.pass_mark_percent,
-      speedBonusWindowSeconds: session.quiz_snapshot.quiz.speed_bonus_window_seconds,
-      questionTimerSeconds: session.quiz_snapshot.quiz.question_timer_seconds ?? 20
+      scoringMode: quiz.scoring_mode,
+      passMarkPercent: quiz.pass_mark_percent,
+      speedBonusWindowSeconds: quiz.speed_bonus_window_seconds,
+      questionTimerSeconds: quiz.question_timer_seconds ?? 20,
+      instructionBullets: translatedBullets ?? englishBullets,
+      instructionsTranslated: Boolean(translatedBullets)
     });
   }
 

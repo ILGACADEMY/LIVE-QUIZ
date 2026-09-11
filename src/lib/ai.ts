@@ -197,3 +197,25 @@ export async function translateQuestion(params: {
   return safeParseJson(extractText(msg), fallback);
 }
 
+/**
+ * Translates the fixed waiting-screen instruction bullets (question
+ * count, timer, scoring rules, pass mark) as plain strings. Unlike
+ * translateQuestion, this only ever needs to preserve meaning, not any
+ * inline styling — the numbers are already baked into each English
+ * sentence before this is called, and the translation just needs to
+ * carry them through naturally (a competent translation keeps numerals
+ * as numerals in virtually every language this app supports).
+ */
+export async function translateBullets(languageName: string, bullets: string[]): Promise<string[]> {
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 600,
+    system:
+      `Translate each of the following short quiz-instruction sentences into ${languageName}, keeping any numbers ` +
+      "exactly as numerals. Return ONLY a valid JSON array of strings, same length and order as given, no preamble, " +
+      "no markdown fences.",
+    messages: [{ role: "user", content: JSON.stringify(bullets) }]
+  });
+  const parsed = safeParseJson<string[]>(extractText(msg), bullets);
+  return Array.isArray(parsed) && parsed.length === bullets.length ? parsed : bullets;
+}
