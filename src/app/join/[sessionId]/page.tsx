@@ -19,6 +19,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
   const [loading, setLoading] = useState(false);
   const [quizTitle, setQuizTitle] = useState<string | null>(null);
   const [translationEnabled, setTranslationEnabled] = useState(false);
+  const [requireContactInfo, setRequireContactInfo] = useState(false);
 
   useEffect(() => {
     setAvatar(randomAvatar());
@@ -28,6 +29,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
       .then((data) => {
         setQuizTitle(data.quizTitle);
         setTranslationEnabled(Boolean(data.translationEnabled));
+        setRequireContactInfo(Boolean(data.requireContactInfo));
       })
       .catch(() => setError("This quiz session was not found or has ended."));
   }, [params.sessionId]);
@@ -39,7 +41,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
     if (!name.trim()) return setError("Please enter your name.");
     if (!store.trim()) return setError("Please enter your store.");
     if (!city.trim()) return setError("Please enter your city.");
-    if (!mobile.trim()) return setError("Please enter your mobile number.");
+    if (requireContactInfo && !mobile.trim()) return setError("Please enter your mobile number.");
 
     setLoading(true);
     const res = await fetch(`/api/sessions/${params.sessionId}/join`, {
@@ -68,7 +70,7 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
   }
 
   return (
-    <main className="min-h-screen relative flex flex-col items-center justify-center px-6 py-16 overflow-hidden">
+    <main className="min-h-screen relative flex flex-col items-center justify-center px-6 py-6 overflow-hidden">
       {/* Decorative slow-rotating watch dial, low opacity — the "rich" hero motif */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-[0.06]">
         <svg viewBox="0 0 400 400" className="w-[140vw] h-[140vw] max-w-none animate-[spin_120s_linear_infinite]">
@@ -86,24 +88,21 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
       </div>
 
       <div className="relative z-10 w-full max-w-sm text-center">
-        <p className="text-parchment/40 text-xs tracking-[0.35em] font-body font-medium mb-4">ILG ACADEMY</p>
-        <MeridianWordmark />
-        <div className="w-10 h-px bg-gold/50 mx-auto my-6" />
-        {quizTitle && <p className="text-parchment/60 text-sm mb-2">{quizTitle}</p>}
-        {!quizTitle && !error && <p className="text-parchment/40 text-sm mb-2">Loading session…</p>}
-        <div className="mb-8" />
+        <MeridianWordmark size="small" />
+        {quizTitle && <p className="text-parchment/60 text-sm mt-2 mb-3">{quizTitle}</p>}
+        {!quizTitle && !error && <p className="text-parchment/40 text-sm mt-2 mb-3">Loading session…</p>}
 
-        <form onSubmit={handleJoin} className="case-panel p-8 text-left">
-          <div className="flex flex-col items-center mb-6">
+        <form onSubmit={handleJoin} className="case-panel p-6 text-left">
+          <div className="flex flex-col items-center mb-4">
             <button
               type="button"
               onClick={() => setAvatar(randomAvatar())}
-              className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline hover:border-gold transition-colors"
+              className="w-14 h-14 flex items-center justify-center text-2xl border border-hairline hover:border-gold transition-colors"
               title="Tap to change your icon"
             >
               {avatar}
             </button>
-            <p className="text-parchment/30 text-xs mt-2">Tap to change your icon</p>
+            <p className="text-parchment/30 text-xs mt-1.5">Tap to change your icon</p>
           </div>
 
           <label className="field-label block mb-2">Your name</label>
@@ -120,20 +119,24 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
             </div>
           </div>
 
-          <label className="field-label block mb-2">Mobile number</label>
-          <input
-            value={mobile}
-            onChange={(e) => setMobile(e.target.value)}
-            type="tel"
-            required
-            className="field-input mb-1"
-            placeholder="e.g. +971 50 123 4567"
-          />
-          <p className="text-parchment/30 text-xs mb-5">Required.</p>
+          {requireContactInfo && (
+            <>
+              <label className="field-label block mb-2">Mobile number</label>
+              <input
+                value={mobile}
+                onChange={(e) => setMobile(e.target.value)}
+                type="tel"
+                required
+                className="field-input mb-1"
+                placeholder="e.g. +971 50 123 4567"
+              />
+              <p className="text-parchment/30 text-xs mb-5">Required.</p>
 
-          <label className="field-label block mb-2">Email (optional)</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="field-input mb-1" placeholder="you@example.com" />
-          <p className="text-parchment/30 text-xs mb-5">Not required — nothing is sent to it.</p>
+              <label className="field-label block mb-2">Email (optional)</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" className="field-input mb-1" placeholder="you@example.com" />
+              <p className="text-parchment/30 text-xs mb-5">Not required — nothing is sent to it.</p>
+            </>
+          )}
 
           {translationEnabled && (
             <>

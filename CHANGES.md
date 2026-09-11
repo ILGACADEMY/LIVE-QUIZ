@@ -957,6 +957,55 @@ pulled live from that quiz's real settings rather than generic text.
 Files: `src/app/api/sessions/[id]/state/route.ts`,
 `src/app/play/[sessionId]/page.tsx`.
 
+## 44. Full round of your PDF feedback — logo, layout, 16:9, join screen, contact info, scoring wording
+
+- **Logo fix**: removed the old logo that pinned itself as a tiny strip
+  above every single page (the actual cause of "too small, lost, have
+  to scroll to see it"). It now renders directly next to the "Meridian"
+  wordmark, properly sized, specifically on the join screen and the
+  presenter's QR panel — the two places it's actually doing branding
+  work — via a new public `/api/branding` endpoint (the existing one was
+  admin-only, which doesn't work for anonymous participant pages).
+- **16:9 / empty space**: widened the presenter dashboard's max width,
+  enlarged the QR code and question chart, and increased font sizes
+  across the question text, answer options, and response chart —
+  directly answering "text too small to read."
+- **New: real full-screen mode** for the whole presenter view (not just
+  the QR overlay), using the browser's actual fullscreen API.
+- **Join screen scroll**: shrunk the decorative header (smaller
+  wordmark, removed a redundant "ILG ACADEMY" label and divider) so
+  Name/Store/City are visible without scrolling on a normal phone.
+- **Mobile/Email now a per-quiz setting**, off by default: a new
+  "Require mobile/email on join" toggle in Advanced settings. Off (the
+  default): those fields don't appear at all, just Name/Store/City. On:
+  mobile becomes required, exactly as it always was — for a real
+  competition that needs duplicate-attempt prevention. Enforced
+  server-side against that specific quiz's setting, not just hidden in
+  the UI.
+- **Scoring explanation rewritten** as a clean bullet list with real
+  numbers instead of vague phrasing — question count, seconds per
+  question, "1 point + up to 10 bonus points, reaching 0 at the
+  timer's end," no penalty for wrong answers, pass mark.
+
+**Where I pushed back, and why**: kept the dark background rather than
+switching to white, since the actual problems described (small text,
+wasted space, hard to read from a distance) are font-size/layout issues,
+not color issues — and the whole "Meridian" identity (dark, gold-accented,
+serif wordmark) was deliberately built to match ILG's actual luxury brand
+positioning, which a plain white background would undercut.
+
+Files: `src/components/shared/MeridianWordmark.tsx`,
+`src/app/api/branding/route.ts` (new), `src/app/layout.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`,
+`src/components/admin/ResponseDistributionChart.tsx`,
+`src/app/join/[sessionId]/page.tsx`,
+`src/app/api/sessions/[id]/join/route.ts`,
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/components/admin/QuizEditor.tsx`, `src/lib/types.ts`,
+`src/app/api/quizzes/route.ts`, `src/app/play/[sessionId]/page.tsx`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+Removed: `src/components/shared/SiteLogo.tsx` (superseded).
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

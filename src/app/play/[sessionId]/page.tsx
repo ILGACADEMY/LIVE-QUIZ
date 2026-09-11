@@ -279,14 +279,34 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
 
         {waitingInfo && (
           <div className="case-panel p-5 max-w-xs text-left">
-            <p className="field-label mb-3 text-center">How scoring works</p>
-            <p className="text-sm text-parchment/70 leading-relaxed mb-2">
-              {waitingInfo.totalQuestions} question{waitingInfo.totalQuestions !== 1 ? "s" : ""}, {waitingInfo.questionTimerSeconds}s each.{" "}
-              {waitingInfo.scoringMode === "speed_bonus"
-                ? "Answer correctly AND quickly for bonus points — the faster a correct answer, the more it's worth."
-                : "Each correct answer earns points — no rush, just answer before time runs out."}
-            </p>
-            <p className="text-sm text-parchment/50">Pass mark: {waitingInfo.passMarkPercent}%</p>
+            <p className="field-label mb-3 text-center">Quiz instructions</p>
+            <ul className="text-sm text-parchment/70 leading-relaxed space-y-1.5 list-disc list-inside">
+              <li>
+                <span className="text-ivory font-medium">{waitingInfo.totalQuestions}</span> multiple-choice question
+                {waitingInfo.totalQuestions !== 1 ? "s" : ""}
+              </li>
+              <li>
+                <span className="text-ivory font-medium">{waitingInfo.questionTimerSeconds} seconds</span> per question
+              </li>
+              {waitingInfo.scoringMode === "speed_bonus" ? (
+                <>
+                  <li>
+                    Each correct answer = <span className="text-gold font-medium">1 point</span>
+                  </li>
+                  <li>
+                    Answer fast for up to <span className="text-gold font-medium">10 bonus points</span> — answer
+                    right away for the full bonus; the bonus shrinks the longer you take, reaching 0 right at{" "}
+                    {waitingInfo.questionTimerSeconds}s
+                  </li>
+                </>
+              ) : (
+                <li>Each correct answer earns points — no rush, just answer before time runs out</li>
+              )}
+              <li>No penalty for a wrong answer — it's simply worth 0</li>
+              <li>
+                Pass mark: <span className="text-ivory font-medium">{waitingInfo.passMarkPercent}%</span>
+              </li>
+            </ul>
           </div>
         )}
       </main>

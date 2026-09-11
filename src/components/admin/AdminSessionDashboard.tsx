@@ -49,6 +49,29 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [busy, setBusy] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
   const [qrFullscreen, setQrFullscreen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Real browser full-screen for the whole presenter view (not just the
+  // QR overlay) — hides the browser's own address bar/tabs so the
+  // content genuinely fills a 16:9 screen or projector, addressing the
+  // "a lot of empty space around a narrow column" feedback directly
+  // rather than just widening the layout a little.
+  function toggleFullscreen() {
+    if (!document.fullscreenElement) {
+      document.getElementById("presenter-main")?.requestFullscreen();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    }
+  }
+  useEffect(() => {
+    function handleChange() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", handleChange);
+    return () => document.removeEventListener("fullscreenchange", handleChange);
+  }, []);
   const [fullLeaderboard, setFullLeaderboard] = useState<AdminLeaderboardRow[] | null>(null);
   const [filterOptions, setFilterOptions] = useState<{ stores: string[]; cities: string[] }>({ stores: [], cities: [] });
   const [nameSearch, setNameSearch] = useState("");
@@ -205,8 +228,8 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
       : "LIVE";
 
   return (
-    <main className="min-h-screen px-6 py-6 md:px-10">
-      <div className="max-w-4xl mx-auto">
+    <main id="presenter-main" className="min-h-screen px-6 py-6 md:px-12 bg-charcoal">
+      <div className="max-w-6xl mx-auto">
         <button onClick={() => router.push("/admin")} className="text-parchment/50 text-sm mb-4 hover:text-gold">
           ← My Quizzes
         </button>
@@ -245,6 +268,9 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             <a href={`/leaderboard/${sessionId}`} target="_blank" rel="noreferrer" className="btn-ghost">
               Show leaderboard
             </a>
+            <button onClick={toggleFullscreen} className="btn-ghost">
+              {isFullscreen ? "Exit full screen" : "Full screen"}
+            </button>
             <button onClick={deleteSession} disabled={busy} className="px-4 py-3 text-crimson/80 hover:text-crimson text-sm">
               Delete session
             </button>
@@ -252,21 +278,21 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
         </div>
 
         {state.status === "waiting" && (
-          <section className="case-panel p-6 mb-5 flex flex-col md:flex-row items-center gap-8">
-            <div className="bg-ivory p-3 shrink-0">
-              <QRCodeSVG value={joinUrl} size={220} bgColor="#F3EDE1" fgColor="#12100D" />
+          <section className="case-panel p-8 mb-5 flex flex-col md:flex-row items-center gap-10">
+            <div className="bg-ivory p-4 shrink-0">
+              <QRCodeSVG value={joinUrl} size={280} bgColor="#F3EDE1" fgColor="#12100D" />
             </div>
             <div>
-              <MeridianWordmark size="small" />
-              <p className="font-display italic text-xl mt-3 mb-1">Scan to join</p>
-              <p className="text-parchment/50 text-sm break-all mb-1">{joinUrl}</p>
+              <MeridianWordmark size="large" />
+              <p className="font-display italic text-2xl mt-4 mb-2">Scan to join</p>
+              <p className="text-parchment/50 text-base break-all mb-1">{joinUrl}</p>
               {state.shortCode && (
-                <p className="text-parchment/50 text-sm mb-1">
+                <p className="text-parchment/50 text-base mb-1">
                   Or go to <span className="text-gold">{joinUrl.split("/join")[0]}/join</span> and enter code{" "}
-                  <span className="font-dial text-gold text-lg tracking-widest">{state.shortCode}</span>
+                  <span className="font-dial text-gold text-xl tracking-widest">{state.shortCode}</span>
                 </p>
               )}
-              <p className="text-parchment/40 text-xs mb-3">No app, account, or password needed.</p>
+              <p className="text-parchment/40 text-sm mb-4">No app, account, or password needed.</p>
               <button onClick={() => setQrFullscreen(true)} className="btn-ghost text-sm px-4 py-2">
                 Show QR full screen
               </button>
@@ -326,13 +352,13 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             picture lives here, and again afterward on each participant's
             results/download page. */}
         {state.question && (
-          <div className="case-panel p-5 mb-4">
-            <p className="text-lg font-medium mb-3">{state.question.questionText}</p>
+          <div className="case-panel p-6 md:p-8 mb-4">
+            <p className="text-2xl md:text-3xl font-display italic mb-4">{state.question.questionText}</p>
             {state.question.imageUrl &&
               (state.question.mediaType === "video" ? (
-                <video src={state.question.imageUrl} controls className="w-full max-h-56 object-contain bg-black mb-3" />
+                <video src={state.question.imageUrl} controls className="w-full max-h-72 object-contain bg-black mb-4" />
               ) : (
-                <img src={state.question.imageUrl} alt="" className="w-full max-h-56 object-cover mb-3" />
+                <img src={state.question.imageUrl} alt="" className="w-full max-h-72 object-cover mb-4" />
               ))}
 
             {state.phase === "revealed" ? (
@@ -346,21 +372,21 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
               // which one's correct wait for reveal (see item 41: showing
               // those live, on a screen the whole room watches, risks a
               // bandwagon effect).
-              <div className="flex flex-col gap-2 mb-2">
+              <div className="flex flex-col gap-3 mb-2">
                 {state.question.options.map((opt) => (
-                  <div key={opt.key} className="px-4 py-2.5 border border-hairline text-sm">
-                    <span className="text-parchment/40 mr-2">{opt.key}</span>
+                  <div key={opt.key} className="px-5 py-4 border border-hairline text-lg">
+                    <span className="text-parchment/50 mr-3 font-medium">{opt.key}</span>
                     {opt.text}
                   </div>
                 ))}
-                <p className="text-parchment/30 text-xs text-center pt-2">
+                <p className="text-parchment/30 text-sm text-center pt-2">
                   Results appear here once answers are revealed.
                 </p>
               </div>
             )}
 
             {state.question.explanation && (
-              <p className="text-sm text-parchment/60 mt-3 border-t border-hairline pt-3">{state.question.explanation}</p>
+              <p className="text-base text-parchment/70 mt-4 border-t border-hairline pt-4">{state.question.explanation}</p>
             )}
           </div>
         )}

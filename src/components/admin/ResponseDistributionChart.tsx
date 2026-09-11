@@ -32,7 +32,7 @@ export default function ResponseDistributionChart({ options, distribution, corre
   const maxCount = Math.max(1, ...counts);
 
   return (
-    <div className="flex items-end justify-center gap-4 md:gap-8 h-52 mb-3 px-2">
+    <div className="flex items-end justify-center gap-6 md:gap-10 h-64 md:h-72 mb-4 px-2">
       {options.map((opt, i) => {
         const dist = distribution?.find((d) => d.key === opt.key);
         const count = dist?.count ?? 0;
@@ -44,24 +44,24 @@ export default function ResponseDistributionChart({ options, distribution, corre
         const colorClass = isCorrect ? "bg-gold" : BAR_COLOR_CLASSES[i % BAR_COLOR_CLASSES.length];
 
         return (
-          <div key={opt.key} className="flex flex-col items-center justify-end h-full flex-1 max-w-[180px]">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className={`font-dial text-3xl transition-colors duration-500 ${isCorrect ? "text-gold" : "text-ivory"}`}>{count}</span>
+          <div key={opt.key} className="flex flex-col items-center justify-end h-full flex-1 max-w-[220px]">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`font-dial text-5xl transition-colors duration-500 ${isCorrect ? "text-gold" : "text-ivory"}`}>{count}</span>
               {isCorrect && (
-                <span className="w-6 h-6 rounded-full bg-gold text-charcoal flex items-center justify-center text-sm font-bold shrink-0">
+                <span className="w-8 h-8 rounded-full bg-gold text-charcoal flex items-center justify-center text-lg font-bold shrink-0">
                   ✓
                 </span>
               )}
             </div>
-            {distribution && <span className="text-parchment/40 text-xs mb-2">{percent}%</span>}
+            {distribution && <span className="text-parchment/50 text-base mb-2">{percent}%</span>}
             <div className="w-full flex items-end justify-center" style={{ height: "100%" }}>
               <div
                 className={`w-full rounded-t-sm transition-all duration-700 ease-out ${colorClass}`}
                 style={{ height: `${heightPercent}%` }}
               />
             </div>
-            <p className="text-xs text-center mt-3 text-parchment/70 leading-snug">
-              <span className="text-parchment/40 mr-1">{opt.key}</span>
+            <p className="text-base text-center mt-3 text-parchment/80 leading-snug">
+              <span className="text-parchment/50 mr-1.5 font-medium">{opt.key}</span>
               {opt.text}
             </p>
           </div>

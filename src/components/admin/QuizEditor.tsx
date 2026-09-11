@@ -232,6 +232,23 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
               <section className="case-panel p-6 mb-6">
                 <p className="field-label mb-4">Advanced quiz behavior</p>
                 <Toggle
+                  label="Require mobile/email on join"
+                  checked={quiz.require_contact_info}
+                  onChange={(v) => setQuizField("require_contact_info", v)}
+                />
+                {quiz.require_contact_info ? (
+                  <p className="text-xs text-parchment/40 -mt-2 mb-4 ml-1">
+                    The mobile number field appears on the join screen and is required (email stays optional) — this
+                    is what stops the same person joining twice. Turn this on for a real competition; leave it off
+                    for a casual quiz where that friction isn't worth it.
+                  </p>
+                ) : (
+                  <p className="text-xs text-parchment/30 -mt-2 mb-4 ml-1">
+                    Off by default — mobile/email fields are hidden on the join screen entirely, just Name/Store/City.
+                    Turn this on if you need to stop duplicate entries for a bigger competition.
+                  </p>
+                )}
+                <Toggle
                   label="Multi-language translation"
                   checked={quiz.translation_enabled}
                   onChange={(v) => setQuizField("translation_enabled", v)}

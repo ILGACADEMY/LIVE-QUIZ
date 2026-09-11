@@ -58,3 +58,6 @@ create unique index if not exists idx_trainers_name on trainers(lower(name));
 
 -- ============ translated explanations (results page, never shown live) ============
 alter table question_translations add column if not exists explanation text;
+
+-- ============ optional mobile/email requirement per quiz ============
+alter table quizzes add column if not exists require_contact_info boolean not null default false;

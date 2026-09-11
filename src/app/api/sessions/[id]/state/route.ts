@@ -263,6 +263,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       quizTitle: session.quiz_snapshot.quiz.title,
       shortCode: session.short_code,
       translationEnabled: session.quiz_snapshot.quiz.translation_enabled,
+      requireContactInfo: session.quiz_snapshot.quiz.require_contact_info,
       questionNumber: session.current_question_index + 1,
       totalQuestions,
       startedAt: session.started_at,

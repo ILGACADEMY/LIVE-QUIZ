@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope, Space_Grotesk, Italiana } from "next/font/google";
 import "./globals.css";
-import SiteLogo from "@/components/shared/SiteLogo";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
@@ -26,7 +25,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${fraunces.variable} ${manrope.variable} ${spaceGrotesk.variable} ${italiana.variable}`}>
       <body className="bg-charcoal text-ivory font-body min-h-screen">
-        <SiteLogo />
         {children}
       </body>
     </html>
