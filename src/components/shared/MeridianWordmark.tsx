@@ -31,14 +31,23 @@ export default function MeridianWordmark({ size = "large" }: { size?: "large" | 
 
   return (
     <div className="flex flex-col items-center">
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-5">
         {logoUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={logoUrl}
-            alt=""
-            className={size === "large" ? "h-16 md:h-20 w-auto object-contain" : "h-9 w-auto object-contain"}
-          />
+          // A light chip behind the logo, regardless of the size prop —
+          // this is what actually makes it "vivid": a logo with its own
+          // transparent or dark background was blending straight into
+          // the page's charcoal, no matter how large it was rendered.
+          // Padding + a light background gives any uploaded logo real
+          // contrast and a defined edge, the same trick the QR code
+          // already uses for the same reason.
+          <div className="bg-ivory px-4 py-3 rounded-sm shadow-lg">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={logoUrl}
+              alt=""
+              className={size === "large" ? "h-20 md:h-24 w-auto object-contain" : "h-11 w-auto object-contain"}
+            />
+          </div>
         )}
         <h1
           className={`font-wordmark tracking-[0.08em] text-gold ${

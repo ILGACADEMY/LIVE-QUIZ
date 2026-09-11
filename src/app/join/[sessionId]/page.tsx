@@ -53,7 +53,8 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
         city: city.trim(),
         mobile: mobile.trim(),
         email: email.trim(),
-        language
+        language,
+        avatar
       })
     });
     setLoading(false);

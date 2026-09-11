@@ -1006,6 +1006,51 @@ Files: `src/components/shared/MeridianWordmark.tsx`,
 `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
 Removed: `src/components/shared/SiteLogo.tsx` (superseded).
 
+## 45. Fixed a real bug: the join icon never matched what you actually picked
+
+Genuine bug, not a design issue: tapping to choose an icon on the join
+screen only ever changed what was shown in your browser — the server
+always assigned its own separate random icon underneath, completely
+ignoring what you'd picked. Fixed: the icon you select is now sent to
+and honored by the server (still validated against the real icon list,
+never trusted blindly), so the icon on the waiting screen now actually
+matches what you tapped to choose.
+
+Files: `src/app/join/[sessionId]/page.tsx`,
+`src/app/api/sessions/[id]/join/route.ts`.
+
+## 46. Logo made genuinely more vivid, and the presenter view fills the screen better
+
+- **Logo**: now sits on a light background chip (the same trick the QR
+  code already uses), so it has real contrast and a defined edge
+  regardless of the uploaded image's own background or colors — the
+  actual fix for "not vivid," which was really a contrast problem, not
+  a size problem. Also enlarged further.
+- **Filled more of the screen**: widened the presenter container
+  significantly (1400px, up from before), vertically centered the
+  content so it doesn't sit stranded at the top of a tall screen, and
+  scaled up the QR panel, stat cards, and question/phase panel to
+  actually use the extra room rather than just adding wider margins
+  around the same-sized content.
+
+Files: `src/components/shared/MeridianWordmark.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
+## 47. New: live countdown timer on the presenter's screen, with an urgency effect in the final 8 seconds
+
+A running countdown now shows above the question while it's live — plain
+and steady until 8 seconds remain, then switches to a large pulsing
+number (scale+fade animation, retriggering every second) building real
+urgency as time runs out, then disappears the moment the phase changes.
+Separately confirmed (no code change needed — this already worked): when
+everyone in the room has answered before time is up, the reveal already
+happens essentially immediately, not after a delay — the answer
+submission itself triggers an instant refresh on the presenter's screen
+rather than waiting for its normal 2-second poll cycle.
+
+Files: `src/components/admin/PresenterTimer.tsx` (new),
+`src/components/admin/AdminSessionDashboard.tsx`, `src/app/globals.css`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

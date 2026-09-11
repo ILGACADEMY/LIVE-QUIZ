@@ -80,3 +80,21 @@
     border-color: #ccc !important;
   }
 }
+
+/* Presenter countdown, final 8 seconds — a punchy scale+fade pulse that
+   restarts every second (see PresenterTimer.tsx, which remounts the
+   element each tick specifically to retrigger this). */
+@keyframes timerPulse {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.85);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}

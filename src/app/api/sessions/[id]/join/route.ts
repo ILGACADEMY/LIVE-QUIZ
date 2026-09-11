@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { broadcastSessionEvent } from "@/lib/realtime";
-import { randomAvatar } from "@/lib/avatars";
+import { randomAvatar, AVATARS } from "@/lib/avatars";
 import { SUPPORTED_LANGUAGES } from "@/lib/languages";
 import { ensureQuestionTranslated } from "@/lib/question-translation-cache";
 
@@ -37,7 +37,7 @@ function normalizeEmail(raw: string): string {
 // to match against — duplicate prevention simply doesn't apply for that
 // quiz, which is the accepted tradeoff of leaving the setting off.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const { name, store, city, mobile, email, language } = await req.json();
+  const { name, store, city, mobile, email, language, avatar: requestedAvatar } = await req.json();
 
   const trimmedName = typeof name === "string" ? name.trim() : "";
   const trimmedStore = typeof store === "string" ? store.trim() : "";
@@ -126,7 +126,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     }
   }
 
-  const avatar = randomAvatar();
+  // Honor the icon the participant actually saw and tapped on the join
+  // screen — this was a real bug before: the server always picked its
+  // own fresh random one regardless of what was shown/selected on
+  // screen, so the icon on the waiting screen never matched what they'd
+  // just chosen. Still validated against the real list rather than
+  // trusted blindly, and still falls back to a random pick if nothing
+  // valid was sent.
+  const avatar = typeof requestedAvatar === "string" && AVATARS.includes(requestedAvatar) ? requestedAvatar : randomAvatar();
 
   const { data: participant, error } = await supabaseAdmin
     .from("participants")
