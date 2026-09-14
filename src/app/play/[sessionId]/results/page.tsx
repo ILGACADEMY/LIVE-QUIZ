@@ -69,6 +69,7 @@ export default function ResultsPage({
     quizTitle: string;
     scorePercent: number;
     issuedAt: string;
+    branding: { logoUrl: string | null; orgName: string; orgSubtitle: string; message: string | null; brandLogoUrl: string | null };
   } | null>(null);
 
   useEffect(() => {
@@ -102,7 +103,8 @@ export default function ResultsPage({
             participantName: d.participantName,
             quizTitle: d.quizTitle,
             scorePercent: d.scorePercent,
-            issuedAt: d.issuedAt
+            issuedAt: d.issuedAt,
+            branding: d.branding
           });
         }
       })
@@ -248,12 +250,39 @@ export default function ResultsPage({
   // — nothing is entered manually, and the date/time is the participant's
   // real completion timestamp, never today's date or the quiz's
   // creation date.
-  function downloadCertificate() {
+  // Loads a remote image (the uploaded logo) as a data URL jsPDF can
+  // actually embed — addImage() needs base64 data or an HTMLImageElement,
+  // not a plain URL, since the PDF is a self-contained file with no
+  // network access of its own once downloaded.
+  async function loadImageAsDataUrl(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+      const dims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = reject;
+        img.src = dataUrl;
+      });
+      return { dataUrl, ...dims };
+    } catch {
+      return null;
+    }
+  }
+
+  async function downloadCertificate() {
     if (!certificate || !data) return;
     const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const centerX = pageWidth / 2;
+    const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl } = certificate.branding;
 
     // Decorative border
     doc.setDrawColor(201, 162, 75); // gold
@@ -272,10 +301,49 @@ export default function ResultsPage({
 
     const completedDate = certificate.issuedAt ? new Date(data.completedAt ?? certificate.issuedAt) : new Date();
 
-    let y = 90;
-    centered("ILG ACADEMY", y, { size: 14, bold: true, color: [201, 162, 75] });
+    let y = 70;
+
+    // Your uploaded company logo, and — for a brand-specific quiz — that
+    // quiz's own brand logo alongside it (e.g. Cerruti 1881, Palm
+    // Angels). With only a company logo, it's centered exactly as
+    // before; with both, they sit side by side with a gap between them,
+    // each fit within its own box, aspect ratio always preserved.
+    const companyLogo = logoUrl ? await loadImageAsDataUrl(logoUrl) : null;
+    const brandLogo = brandLogoUrl ? await loadImageAsDataUrl(brandLogoUrl) : null;
+
+    if (companyLogo || brandLogo) {
+      const maxW = 100;
+      const maxH = 44;
+      const gap = 28;
+
+      function fitted(logo: { dataUrl: string; width: number; height: number }) {
+        const scale = Math.min(maxW / logo.width, maxH / logo.height);
+        return { w: logo.width * scale, h: logo.height * scale };
+      }
+
+      if (companyLogo && brandLogo) {
+        const c = fitted(companyLogo);
+        const b = fitted(brandLogo);
+        const totalW = c.w + gap + b.w;
+        const startX = centerX - totalW / 2;
+        // Each logo sized independently, but both bottom-aligned to the
+        // same y — so a short, wide logo and a tall, narrow one still
+        // look like they belong on the same line, the way two logos in
+        // a letterhead normally would.
+        doc.addImage(companyLogo.dataUrl, startX, y - c.h, c.w, c.h);
+        doc.addImage(brandLogo.dataUrl, startX + c.w + gap, y - b.h, b.w, b.h);
+        y += 16;
+      } else {
+        const logo = (companyLogo ?? brandLogo)!;
+        const f = fitted(logo);
+        doc.addImage(logo.dataUrl, centerX - f.w / 2, y - f.h, f.w, f.h);
+        y += 16;
+      }
+    }
+
+    centered(orgName, y, { size: 14, bold: true, color: [201, 162, 75] });
     y += 20;
-    centered("TRAINING & DEVELOPMENT", y, { size: 10, color: [120, 120, 120] });
+    centered(orgSubtitle, y, { size: 10, color: [120, 120, 120] });
     y += 46;
     centered("CERTIFICATE OF ACHIEVEMENT", y, { size: 24, bold: true });
     y += 44;
@@ -291,11 +359,12 @@ export default function ResultsPage({
     y += 26;
     centered(`${certificate.scorePercent}%`, y, { size: 20, bold: true, color: [201, 162, 75] });
     y += 40;
-    const achievementLine = doc.splitTextToSize(
-      `This achievement demonstrates ${certificate.participantName}'s successful understanding of the key knowledge ` +
-        "and learning objectives covered in the training.",
-      pageWidth - 180
-    ) as string[];
+    // Custom per-quiz wording if the admin set one (with {name} filled
+    // in), otherwise the same default sentence as before.
+    const achievementText = (
+      message || "This achievement demonstrates {name}'s successful understanding of the key knowledge and learning objectives covered in the training."
+    ).replace(/\{name\}/gi, certificate.participantName);
+    const achievementLine = doc.splitTextToSize(achievementText, pageWidth - 180) as string[];
     achievementLine.forEach((line) => {
       centered(line, y, { size: 10.5, color: [90, 90, 90] });
       y += 15;

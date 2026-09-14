@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
       translation_enabled: body.translation_enabled ?? false,
       require_contact_info: body.require_contact_info ?? false,
       issue_certificate: body.issue_certificate ?? false,
+      certificate_message: body.certificate_message ?? null,
+      brand_logo_url: body.brand_logo_url ?? null,
       after_answer_mode: body.after_answer_mode ?? "auto_advance",
       status: "draft"
     })

@@ -1206,6 +1206,78 @@ Files: `src/app/play/[sessionId]/results/page.tsx`,
 `package-lock.json`, `supabase/schema.sql`,
 `supabase/upgrade_existing_database.sql`.
 
+## 50. Certificate template — your logo and editable wording
+
+Two customization points, without building a full drag-and-drop
+certificate designer (which would be much bigger and riskier to get
+right):
+
+- **Your logo now appears on the certificate automatically** — reuses
+  the same logo you've already uploaded for the rest of the app, no
+  separate upload needed. Fit within a fixed box, aspect ratio always
+  preserved, never stretched or distorted.
+- **Organization name/subtitle** ("ILG ACADEMY" / "TRAINING &
+  DEVELOPMENT") are now editable site-wide, right in the same Branding
+  settings section where you upload the logo.
+- **The achievement sentence is customizable per quiz** — each quiz's
+  Advanced settings now has an optional "Certificate achievement
+  message" field. Use `{name}` anywhere you want the participant's name
+  inserted; leave it blank to keep the default wording.
+
+**Verified functionally, not just type-checked** — embedding a real
+image into a generated PDF is exactly the kind of thing that can compile
+fine and still fail at runtime, so I actually generated a test PDF with
+a real embedded image and confirmed it produced a valid file before
+calling this done (caught and fixed a mistake in my own test data along
+the way — not a bug in the actual app code, just my first test image
+being malformed).
+
+Files: `src/components/admin/BrandingSettings.tsx`,
+`src/app/api/admin/branding/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/QuizEditor.tsx`, `src/lib/types.ts`,
+`src/app/api/quizzes/route.ts`, `supabase/schema.sql`,
+`supabase/upgrade_existing_database.sql`.
+
+## 51. Brand-specific certificate logo — company logo + brand logo together
+
+For a brand-specific quiz (Cerruti 1881, Palm Angels, etc.), the
+certificate can now show that brand's own logo alongside the company
+logo — not instead of it. A quiz with no brand logo set still shows just
+the company logo, exactly as before.
+
+- New per-quiz upload in Advanced settings (only shown once "Issue
+  certificate on passing" is on): "Brand logo for this quiz's
+  certificate."
+- When set, the certificate shows both logos side by side, each fit to
+  its own box and aspect ratio preserved independently, bottom-aligned
+  to a shared baseline so a short wide logo and a tall narrow one still
+  look like they belong on the same line together.
+- When not set, behaves exactly as before — just the company logo,
+  centered.
+
+**Verified functionally**: generated a real test PDF with two
+differently-proportioned logos (one wide, one tall) and confirmed both
+land on the exact same baseline despite the size difference, rather than
+just trusting the math by inspection.
+
+Files: `src/components/admin/QuizEditor.tsx`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`, `src/lib/types.ts`,
+`src/app/api/quizzes/route.ts`, `supabase/schema.sql`,
+`supabase/upgrade_existing_database.sql`.
+
+## 52. Searchable language picker on the join screen
+
+Replaced the plain scrolling dropdown (61 languages, genuinely tedious
+to scroll through on a phone) with a type-to-search picker. Matches
+against both the English name and the native-script name, so typing
+"Hindi" or "हिन्दी" both find the same entry.
+
+Files: `src/components/participant/LanguagePicker.tsx` (new),
+`src/app/join/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

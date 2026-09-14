@@ -62,6 +62,19 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   // Already issued? Return the same one — never generate a second
   // certificate for the same participant.
+  const { data: appSettings } = await supabaseAdmin
+    .from("app_settings")
+    .select("logo_url, certificate_org_name, certificate_org_subtitle")
+    .limit(1)
+    .maybeSingle();
+  const branding = {
+    logoUrl: appSettings?.logo_url ?? null,
+    orgName: appSettings?.certificate_org_name ?? "ILG ACADEMY",
+    orgSubtitle: appSettings?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
+    message: quiz.certificate_message ?? null,
+    brandLogoUrl: quiz.brand_logo_url ?? null
+  };
+
   const { data: existing } = await supabaseAdmin
     .from("certificates")
     .select("*")
@@ -76,7 +89,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       quizTitle: existing.quiz_title,
       scorePercent: existing.score_percent,
       issuedAt: existing.issued_at,
-      completedAt: participant.completed_at
+      completedAt: participant.completed_at,
+      branding
     });
   }
 
@@ -117,7 +131,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
           quizTitle: raceWinner.quiz_title,
           scorePercent: raceWinner.score_percent,
           issuedAt: raceWinner.issued_at,
-          completedAt: participant.completed_at
+          completedAt: participant.completed_at,
+          branding
         });
       }
     }
@@ -131,6 +146,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     quizTitle: created.quiz_title,
     scorePercent: created.score_percent,
     issuedAt: created.issued_at,
-    completedAt: participant.completed_at
+    completedAt: participant.completed_at,
+    branding
   });
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Quiz, ScoringMode, AfterAnswerMode } from "@/lib/types";
+import { supabaseBrowser } from "@/lib/supabase/client";
 import Toggle from "@/components/shared/Toggle";
 import QuestionEditor, { EditableQuestion, blankQuestion } from "@/components/admin/QuestionEditor";
 import ImportQuestionsModal from "@/components/admin/ImportQuestionsModal";
@@ -24,6 +25,9 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   const [customTimer, setCustomTimer] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [advancedMode, setAdvancedMode] = useState(false);
+  const [brandLogoUploading, setBrandLogoUploading] = useState(false);
+  const [brandLogoError, setBrandLogoError] = useState<string | null>(null);
+  const brandLogoInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetch(`/api/quizzes/${quizId}`)
@@ -46,6 +50,46 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   function setQuizField<K extends keyof Quiz>(key: K, value: Quiz[K]) {
     if (!quiz) return;
     setQuiz({ ...quiz, [key]: value });
+  }
+
+  // Same signed-upload pattern used for question images and the
+  // app-wide company logo — the file goes straight to Supabase Storage.
+  // This one is scoped to THIS quiz only (stored on quizzes.brand_logo_url),
+  // not the shared app_settings logo, so different brand quizzes can each
+  // carry their own without affecting each other or the company logo.
+  async function handleBrandLogoUpload(file: File) {
+    setBrandLogoUploading(true);
+    setBrandLogoError(null);
+    try {
+      if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
+        setBrandLogoError("Brand logo must be a JPG, PNG, or WEBP image.");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setBrandLogoError("Brand logo must be under 5MB.");
+        return;
+      }
+      const signRes = await fetch("/api/upload/sign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: file.name, fileType: file.type })
+      });
+      const signData = await signRes.json();
+      if (!signRes.ok) {
+        setBrandLogoError(signData.error ?? "Could not prepare the upload.");
+        return;
+      }
+      const { error: storageError } = await supabaseBrowser.storage.from("quiz-images").uploadToSignedUrl(signData.path, signData.token, file);
+      if (storageError) {
+        setBrandLogoError(`Upload failed: ${storageError.message}`);
+        return;
+      }
+      setQuizField("brand_logo_url", signData.publicUrl);
+    } catch {
+      setBrandLogoError("Network error — the upload never reached the server.");
+    } finally {
+      setBrandLogoUploading(false);
+    }
   }
 
   function addQuestion() {
@@ -279,6 +323,63 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                   <p className="text-xs text-parchment/30 -mt-2 mb-2 ml-1">
                     Off by default. Turn on to automatically offer a certificate to anyone who passes this quiz.
                   </p>
+                )}
+                {quiz.issue_certificate && (
+                  <div className="mb-4 ml-1">
+                    <label className="field-label block mb-2">Certificate achievement message (optional)</label>
+                    <textarea
+                      value={quiz.certificate_message ?? ""}
+                      onChange={(e) => setQuizField("certificate_message", e.target.value || null)}
+                      rows={2}
+                      className="field-input text-sm"
+                      placeholder={`This achievement demonstrates {name}'s successful understanding of the key knowledge and learning objectives covered in the training.`}
+                    />
+                    <p className="text-xs text-parchment/30 mt-1.5">
+                      Use <span className="font-dial text-parchment/50">{"{name}"}</span> anywhere you want the
+                      participant's name inserted. Leave blank to use the default wording shown above as a
+                      placeholder.
+                    </p>
+                  </div>
+                )}
+                {quiz.issue_certificate && (
+                  <div className="mb-4 ml-1">
+                    <label className="field-label block mb-2">Brand logo for this quiz's certificate (optional)</label>
+                    <p className="text-xs text-parchment/30 mb-2">
+                      Shown alongside the company logo — e.g. Cerruti 1881, Palm Angels — for a brand-specific quiz.
+                      Leave unset and the certificate shows the company logo only.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      {quiz.brand_logo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={quiz.brand_logo_url} alt="Brand logo" className="h-10 w-auto object-contain border border-hairline p-1 bg-ivory" />
+                      ) : (
+                        <div className="h-10 w-10 border border-hairline flex items-center justify-center text-parchment/30 text-xs">
+                          None
+                        </div>
+                      )}
+                      <input
+                        ref={brandLogoInput}
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => e.target.files?.[0] && handleBrandLogoUpload(e.target.files[0])}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => brandLogoInput.current?.click()}
+                        disabled={brandLogoUploading}
+                        className="btn-ghost text-sm px-4 py-2"
+                      >
+                        {brandLogoUploading ? "Uploading…" : quiz.brand_logo_url ? "Replace brand logo" : "Upload brand logo"}
+                      </button>
+                      {quiz.brand_logo_url && (
+                        <button type="button" onClick={() => setQuizField("brand_logo_url", null)} className="text-xs text-crimson/80 hover:text-crimson">
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    {brandLogoError && <p className="text-crimson text-xs mt-2">{brandLogoError}</p>}
+                  </div>
                 )}
                 <Toggle label="Randomize questions" checked={quiz.randomize_questions} onChange={(v) => setQuizField("randomize_questions", v)} />
                 <Toggle label="Randomize answers" checked={quiz.randomize_answers} onChange={(v) => setQuizField("randomize_answers", v)} />

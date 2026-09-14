@@ -23,6 +23,8 @@ export interface Quiz {
   translation_enabled: boolean; // OFF by default — AI translation costs money per question per language, so it only runs when a quiz explicitly opts in
   require_contact_info: boolean; // OFF by default — mobile/email hidden on join for casual quizzes; on for a real competition needing duplicate-prevention
   issue_certificate: boolean; // OFF by default — when on, a participant who passes gets a certificate offered on their results page
+  certificate_message: string | null; // optional custom achievement sentence for this quiz's certificate; null = app-wide default
+  brand_logo_url: string | null; // optional per-quiz brand logo shown alongside the company logo on this quiz's certificate; null = company logo only
   after_answer_mode: AfterAnswerMode; // NOTE: no longer used for pacing — see README note in migration 002 patch guide. Kept on the type/schema so existing builder UI doesn't break; presenter always controls advancement now regardless of this setting.
   status: QuizStatus;
   created_at: string;

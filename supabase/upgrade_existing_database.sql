@@ -73,6 +73,10 @@ create table if not exists instruction_translations (
 
 -- ============ certificates ============
 alter table quizzes add column if not exists issue_certificate boolean not null default false;
+alter table quizzes add column if not exists certificate_message text;
+alter table quizzes add column if not exists brand_logo_url text;
+alter table app_settings add column if not exists certificate_org_name text not null default 'ILG ACADEMY';
+alter table app_settings add column if not exists certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT';
 
 create sequence if not exists certificate_number_seq start 1;
 

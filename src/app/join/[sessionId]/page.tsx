@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { SUPPORTED_LANGUAGES, detectSupportedLanguage } from "@/lib/languages";
+import { detectSupportedLanguage } from "@/lib/languages";
+import LanguagePicker from "@/components/participant/LanguagePicker";
 import { AVATARS, randomAvatar } from "@/lib/avatars";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
@@ -142,13 +143,9 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
           {translationEnabled && (
             <>
               <label className="field-label block mb-2">Quiz language</label>
-              <select value={language} onChange={(e) => setLanguage(e.target.value)} className="field-input mb-6">
-                {SUPPORTED_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.nativeLabel}
-                  </option>
-                ))}
-              </select>
+              <div className="mb-6">
+                <LanguagePicker value={language} onChange={setLanguage} />
+              </div>
             </>
           )}
 

@@ -26,7 +26,9 @@ create table if not exists quizzes (
   question_timer_seconds    int  not null default 20, -- how long each question stays open in a LIVE session (all scoring modes) before auto-reveal
   translation_enabled       boolean not null default false, -- OFF by default: AI translation costs money per question per language, so it only runs for quizzes that explicitly opt in
   require_contact_info      boolean not null default false, -- OFF by default: mobile/email fields hidden on join for casual quizzes; turn on for a real competition needing duplicate-prevention
-  issue_certificate         boolean not null default false, -- OFF by default: when on, a participant who passes gets a certificate offered on their results page  after_answer_mode         text not null default 'auto_advance'
+  issue_certificate         boolean not null default false, -- OFF by default: when on, a participant who passes gets a certificate offered on their results page
+  certificate_message       text, -- optional custom achievement sentence for THIS quiz's certificate; null = use the app-wide default wording
+  brand_logo_url            text, -- optional per-quiz brand logo (e.g. Cerruti 1881, Palm Angels) shown ALONGSIDE the company logo on this quiz's certificate; null = company logo only  after_answer_mode         text not null default 'auto_advance'
                               check (after_answer_mode in ('auto_advance', 'next_button')), -- used by Preview only; a live session is always presenter-controlled
   status                    text not null default 'draft'
                               check (status in ('draft', 'published')),
@@ -289,6 +291,8 @@ on conflict (id) do nothing;
 create table if not exists app_settings (
   id uuid primary key default gen_random_uuid(),
   logo_url text,
+  certificate_org_name text not null default 'ILG ACADEMY',
+  certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT',
   updated_at timestamptz not null default now()
 );
 insert into app_settings (id)

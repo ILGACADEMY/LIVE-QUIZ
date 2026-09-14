@@ -5,6 +5,9 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function BrandingSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [orgName, setOrgName] = useState("ILG ACADEMY");
+  const [orgSubtitle, setOrgSubtitle] = useState("TRAINING & DEVELOPMENT");
+  const [orgSaved, setOrgSaved] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -12,9 +15,28 @@ export default function BrandingSettings() {
   useEffect(() => {
     fetch("/api/admin/branding")
       .then((r) => r.json())
-      .then((data) => setLogoUrl(data.logoUrl ?? null))
+      .then((data) => {
+        setLogoUrl(data.logoUrl ?? null);
+        setOrgName(data.certificateOrgName ?? "ILG ACADEMY");
+        setOrgSubtitle(data.certificateOrgSubtitle ?? "TRAINING & DEVELOPMENT");
+      })
       .catch(() => {});
   }, []);
+
+  async function saveOrgText() {
+    setError(null);
+    const res = await fetch("/api/admin/branding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ certificateOrgName: orgName, certificateOrgSubtitle: orgSubtitle })
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      setError(data.error ?? "Could not save.");
+      return;
+    }
+    setOrgSaved(true);
+  }
 
   async function handleUpload(file: File) {
     setLoading(true);
@@ -70,7 +92,7 @@ export default function BrandingSettings() {
 
   return (
     <div className="case-panel p-5 mb-8">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center justify-between gap-4 flex-wrap mb-5">
         <div className="flex items-center gap-4">
           {logoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -82,7 +104,9 @@ export default function BrandingSettings() {
           )}
           <div>
             <p className="field-label mb-1">Company logo</p>
-            <p className="text-parchment/40 text-xs">Shown at the top of every page — join screen, presenter view, results, everywhere.</p>
+            <p className="text-parchment/40 text-xs">
+              Shown at the top of every page (join screen, presenter view, results) and on issued certificates.
+            </p>
           </div>
         </div>
         <input
@@ -96,6 +120,40 @@ export default function BrandingSettings() {
           {loading ? "Uploading…" : logoUrl ? "Replace logo" : "Upload logo"}
         </button>
       </div>
+
+      <div className="border-t border-hairline pt-5">
+        <p className="field-label mb-1">Certificate wording</p>
+        <p className="text-parchment/40 text-xs mb-3">
+          The organization name shown at the top of every issued certificate. To customize the achievement sentence
+          for a specific quiz's certificate, use that quiz's own Advanced settings instead.
+        </p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <input
+            value={orgName}
+            onChange={(e) => {
+              setOrgName(e.target.value);
+              setOrgSaved(false);
+            }}
+            className="field-input text-sm"
+            placeholder="ILG ACADEMY"
+          />
+          <input
+            value={orgSubtitle}
+            onChange={(e) => {
+              setOrgSubtitle(e.target.value);
+              setOrgSaved(false);
+            }}
+            className="field-input text-sm"
+            placeholder="TRAINING & DEVELOPMENT"
+          />
+        </div>
+        {!orgSaved && (
+          <button onClick={saveOrgText} className="btn-ghost text-sm px-4 py-2 mt-3">
+            Save wording
+          </button>
+        )}
+      </div>
+
       {error && <p className="text-crimson text-sm mt-4">{error}</p>}
     </div>
   );
