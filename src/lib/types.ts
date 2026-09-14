@@ -86,6 +86,7 @@ export interface LiveSession {
   started_at: string | null;
   ended_at: string | null;
   delete_at: string;
+  questions_presented: number | null; // set once the session finishes: how many questions were actually shown, for scoring against instead of the full deck size
 }
 
 export interface Participant {

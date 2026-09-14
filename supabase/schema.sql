@@ -91,7 +91,16 @@ create table if not exists sessions (
   created_at                    timestamptz not null default now(),
   started_at                    timestamptz,
   ended_at                      timestamptz,
-  delete_at                     timestamptz not null default (now() + interval '24 hours')
+  delete_at                     timestamptz not null default (now() + interval '24 hours'),
+  -- How many questions were actually presented before this session ended
+  -- — set once, at the moment it finishes, to current_question_index + 1.
+  -- Ending a quiz early (a deliberate "cut it short, find a winner now"
+  -- call) must not silently divide everyone's score by the FULL deck
+  -- size; every score/pass-fail/certificate calculation for this session
+  -- uses this number as the denominator instead, once it's set. Null for
+  -- a session still in progress — nothing to fall back to needed there,
+  -- since nothing reads this until the session finishes.
+  questions_presented           int
 );
 create unique index if not exists idx_sessions_short_code_active on sessions(short_code) where status != 'finished';
 

@@ -43,6 +43,9 @@ where not exists (select 1 from app_settings);
 
 -- ============ short join code (QR alternative) ============
 alter table sessions add column if not exists short_code text;
+
+-- ============ scoring denominator when a quiz ends early ============
+alter table sessions add column if not exists questions_presented int;
 create unique index if not exists idx_sessions_short_code_active on sessions(short_code) where status != 'finished';
 
 -- ============ named, expiring trainer accounts (replaces the old single shared TRAINER_PASSWORD) ============

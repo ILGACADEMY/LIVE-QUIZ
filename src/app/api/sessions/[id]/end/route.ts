@@ -11,12 +11,33 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const { data: current, error: fetchError } = await supabaseAdmin
+    .from("sessions")
+    .select("status, current_question_index")
+    .eq("id", params.id)
+    .single();
+  if (fetchError || !current) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+
   const endedAt = new Date();
   const deleteAt = new Date(endedAt.getTime() + 24 * 60 * 60 * 1000);
 
+  // How many questions were actually shown before this end — whether
+  // that's the natural last question or a deliberate early cut-short
+  // ("stop here, find a winner now"). 0 if the quiz never even started.
+  // Every score/pass-fail/certificate calculation for this session uses
+  // this as the denominator instead of the full deck size, so ending
+  // early doesn't silently divide everyone's score by questions they
+  // never had a chance to answer.
+  const questionsPresented = current.status === "live" ? current.current_question_index + 1 : 0;
+
   const { data: session, error } = await supabaseAdmin
     .from("sessions")
-    .update({ status: "finished", ended_at: endedAt.toISOString(), delete_at: deleteAt.toISOString() })
+    .update({
+      status: "finished",
+      ended_at: endedAt.toISOString(),
+      delete_at: deleteAt.toISOString(),
+      questions_presented: questionsPresented
+    })
     .eq("id", params.id)
     .select()
     .single();

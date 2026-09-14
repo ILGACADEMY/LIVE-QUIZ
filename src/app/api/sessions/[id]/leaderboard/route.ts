@@ -30,10 +30,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const { data: session } = await supabaseAdmin
     .from("sessions")
-    .select("quiz_snapshot")
+    .select("quiz_snapshot, questions_presented")
     .eq("id", params.id)
     .single();
-  const totalQuestions = session?.quiz_snapshot?.questions?.length ?? 0;
+  // Same fix as results/certificate: score against how many questions
+  // were actually presented in this session, not the full quiz
+  // template's length, so ending early doesn't divide everyone's score
+  // by questions they never had a chance to answer.
+  const totalQuestions = session?.questions_presented ?? session?.quiz_snapshot?.questions?.length ?? 0;
 
   const { data: allJoined, error: joinedError } = await supabaseAdmin
     .from("participants")

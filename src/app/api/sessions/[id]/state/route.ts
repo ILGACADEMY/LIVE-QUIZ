@@ -107,7 +107,14 @@ async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
 
     const { data: updated } = await supabaseAdmin
       .from("sessions")
-      .update({ status: "finished", phase: "finished", ended_at: endedAt.toISOString(), delete_at: deleteAt.toISOString(), phase_deadline: null })
+      .update({
+        status: "finished",
+        phase: "finished",
+        ended_at: endedAt.toISOString(),
+        delete_at: deleteAt.toISOString(),
+        phase_deadline: null,
+        questions_presented: session.current_question_index + 1
+      })
       .eq("id", session.id)
       .eq("phase", "revealed") // guards against racing with a presenter's manual click
       .select()

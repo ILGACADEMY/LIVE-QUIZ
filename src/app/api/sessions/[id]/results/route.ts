@@ -40,7 +40,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (aError) return NextResponse.json({ error: aError.message }, { status: 500 });
 
   const quiz = session.quiz_snapshot.quiz;
-  const totalQuestions = session.quiz_snapshot.questions.length;
+  // Scores against how many questions were ACTUALLY presented in this
+  // session, not the full quiz template's length — ending a quiz early
+  // (a deliberate "cut it short, find a winner now" call) must not
+  // silently divide everyone's score by questions they never had a
+  // chance to see. Falls back to the full deck length only for a
+  // session finished before this column existed.
+  const totalQuestions = session.questions_presented ?? session.quiz_snapshot.questions.length;
   const correctCount = answers.filter((a) => a.is_correct).length;
   const percentage = Math.round((correctCount / totalQuestions) * 100);
   const passed = percentage >= quiz.pass_mark_percent;

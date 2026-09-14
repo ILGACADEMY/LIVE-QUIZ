@@ -1278,6 +1278,84 @@ against both the English name and the native-script name, so typing
 Files: `src/components/participant/LanguagePicker.tsx` (new),
 `src/app/join/[sessionId]/page.tsx`.
 
+## 53. Fixed: ending a quiz early scored everyone against the full deck, not what was actually shown
+
+Real, meaningful scoring bug: if you deliberately cut a quiz short (say,
+stop after question 12 of a 20-question deck to find a winner faster),
+every participant's percentage — and therefore pass/fail, certificate
+eligibility, and the group's average — was still being divided by 20,
+not 12. Someone who answered all 12 shown questions correctly would have
+shown as 60%, not 100%.
+
+**Fixed at the source**: the moment a session finishes — whether
+naturally at the last question or cut short early — it now records
+exactly how many questions were actually presented. Every scoring
+calculation for that session (individual results, the leaderboard, group
+AI analysis, and certificate eligibility) uses that number as the
+denominator from then on, not the quiz template's full length. A session
+that already finished before this update keeps using the old
+(technically incorrect for early-ended sessions, but that's what already
+existed) full-deck calculation — this only changes behavior for sessions
+that finish going forward.
+
+Files: `src/app/api/sessions/[id]/end/route.ts`,
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/app/api/sessions/[id]/results/route.ts`,
+`src/app/api/sessions/[id]/leaderboard/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/app/api/ai/analysis/route.ts`, `src/lib/types.ts`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
+## 54. Certificate redesign — French wording, decorative elements, and a background-image option
+
+Rebuilt the certificate to match your reference design as closely as
+achievable with vector drawing (no image assets involved) — plus a
+second option for exact fidelity to any specific design.
+
+**Built-in layout, now in French:**
+- Stacked header (org name large with a red underline accent, subtitle
+  below) instead of the old side-by-side treatment
+- "CERTIFIÉ" / quiz title in bold red / "DÉCERNÉ À" / participant name
+  on an underline, matching the reference's structure
+- Achievement sentence now defaults to French wording (still fully
+  overridable per quiz via the existing "Certificate achievement
+  message" field, which now also accepts a `{score}` placeholder
+  alongside `{name}`)
+- A simple decorative watch-dial motif (concentric circles + hour ticks)
+  and a wax-seal approximation (a filled circle with the org's initials)
+  — **honest limitation**: these are simple vector approximations, not
+  a recreation of the detailed illustration or a real wax texture in
+  your reference image, which isn't achievable with drawing primitives
+  alone.
+- A placeholder signature flourish above "DIRECTEUR ACADÉMIQUE" — a
+  simple drawn mark standing in for a real signature until you have one
+  to add as an image.
+- New optional "location" line (e.g. "ILG OF SWITZERLAND MÖHLIN, AARGAU
+  SWITZERLAND"), editable in Branding settings, shown only if set.
+
+**New: upload an exact custom design instead.** Branding settings now
+has a "Certificate background" upload — a full designed template image
+(like this exact reference, or one you build in a design tool). When
+set, that image is used as the full-page background and the
+participant's name, quiz title, achievement text, and date are drawn on
+top of it, positioned to roughly match this reference's layout. This is
+the path to genuinely exact visual fidelity, since a background image
+carries all its own illustration/texture as pixels rather than needing
+to be redrawn.
+
+**Verified functionally**: generated a real test PDF exercising every
+new drawing call (circles, tick marks, French accented text, the seal,
+the signature flourish) and confirmed it produced a valid file before
+calling this done — also caught and fixed a real bug in my own edit
+along the way (a text-replacement script left old code accidentally
+duplicated, which would have failed to compile).
+
+Files: `src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/BrandingSettings.tsx`,
+`src/app/api/admin/branding/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
