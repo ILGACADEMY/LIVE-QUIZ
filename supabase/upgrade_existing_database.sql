@@ -80,6 +80,8 @@ alter table quizzes add column if not exists certificate_message text;
 alter table quizzes add column if not exists brand_logo_url text;
 alter table app_settings add column if not exists certificate_org_name text not null default 'ILG ACADEMY';
 alter table app_settings add column if not exists certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT';
+alter table app_settings add column if not exists certificate_location text;
+alter table app_settings add column if not exists certificate_background_url text;
 
 create sequence if not exists certificate_number_seq start 1;
 

@@ -302,6 +302,8 @@ create table if not exists app_settings (
   logo_url text,
   certificate_org_name text not null default 'ILG ACADEMY',
   certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT',
+  certificate_location text, -- optional line near the bottom, e.g. "ILG OF SWITZERLAND MÖHLIN, AARGAU SWITZERLAND"; blank = not shown
+  certificate_background_url text, -- optional full-page background image (a designed template) — if set, drawn behind everything else instead of the built-in drawn layout
   updated_at timestamptz not null default now()
 );
 insert into app_settings (id)

@@ -69,7 +69,7 @@ export default function ResultsPage({
     quizTitle: string;
     scorePercent: number;
     issuedAt: string;
-    branding: { logoUrl: string | null; orgName: string; orgSubtitle: string; message: string | null; brandLogoUrl: string | null };
+    branding: { logoUrl: string | null; orgName: string; orgSubtitle: string; message: string | null; brandLogoUrl: string | null; location: string | null; backgroundUrl: string | null };
   } | null>(null);
 
   useEffect(() => {
@@ -282,104 +282,207 @@ export default function ResultsPage({
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     const centerX = pageWidth / 2;
-    const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl } = certificate.branding;
+    const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl, location, backgroundUrl } = certificate.branding;
+    const completedDate = data.completedAt ? new Date(data.completedAt) : new Date(certificate.issuedAt);
+    const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 
-    // Decorative border
-    doc.setDrawColor(201, 162, 75); // gold
-    doc.setLineWidth(2);
-    doc.rect(24, 24, pageWidth - 48, pageHeight - 48);
-    doc.setLineWidth(0.75);
-    doc.rect(32, 32, pageWidth - 64, pageHeight - 64);
-
-    function centered(text: string, y: number, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) {
-      const { size = 12, bold = false, color = [30, 30, 30] } = opts;
-      doc.setFont("helvetica", bold ? "bold" : "normal");
+    function centered(text: string, y: number, opts: { size?: number; bold?: boolean; italic?: boolean; color?: [number, number, number]; tracked?: boolean } = {}) {
+      const { size = 12, bold = false, italic = false, color = [30, 30, 30], tracked = false } = opts;
+      doc.setFont("helvetica", italic ? "italic" : bold ? "bold" : "normal");
       doc.setFontSize(size);
       doc.setTextColor(color[0], color[1], color[2]);
-      doc.text(text, centerX, y, { align: "center" });
+      // A simple letter-spacing approximation for the small caps headings
+      // in the reference design — jsPDF's core fonts have no native
+      // tracking control, so this spells the text out with extra spaces
+      // between characters rather than using a real kerning API.
+      const rendered = tracked ? text.split("").join("\u2009") : text;
+      doc.text(rendered, centerX, y, { align: "center" });
     }
 
-    const completedDate = certificate.issuedAt ? new Date(data.completedAt ?? certificate.issuedAt) : new Date();
+    // Custom per-quiz achievement wording if the admin set one (with
+    // {name}/{score} placeholders filled in), otherwise the French
+    // default matching the reference design.
+    const achievementText = (
+      message ||
+      `En reconnaissance de la r\u00e9ussite du programme ${orgName} ${orgSubtitle}, avec un score de {score}%.`
+    )
+      .replace(/\{name\}/gi, certificate.participantName)
+      .replace(/\{score\}/gi, String(certificate.scorePercent));
 
-    let y = 70;
+    // ---- Path A: a fully custom uploaded background image ----
+    // Text is overlaid at fixed positions matching the reference layout's
+    // proportions (name centered mid-page, achievement text below it,
+    // date/signature near the bottom) -- this is necessarily approximate
+    // for an arbitrary uploaded design, since there's no way to know
+    // exactly where blank areas were left on a custom template. Best
+    // suited to a background built to roughly this same layout.
+    if (backgroundUrl) {
+      const bg = await loadImageAsDataUrl(backgroundUrl);
+      if (bg) {
+        doc.addImage(bg.dataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
+      }
+      centered(certificate.quizTitle.toUpperCase(), pageHeight * 0.32, { size: 22, bold: true, color: [140, 30, 30] });
+      centered(certificate.participantName, pageHeight * 0.46, { size: 22, bold: true, color: [40, 40, 40] });
+      const lines = doc.splitTextToSize(achievementText, pageWidth * 0.55) as string[];
+      let ly = pageHeight * 0.58;
+      lines.forEach((line) => {
+        centered(line, ly, { size: 10.5, color: [80, 80, 80] });
+        ly += 14;
+      });
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(80, 80, 80);
+      doc.text(completedDate.toLocaleDateString(), pageWidth * 0.28, pageHeight * 0.88, { align: "center" });
+      doc.save(`ILG_Academy_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
+      return;
+    }
 
-    // Your uploaded company logo, and — for a brand-specific quiz — that
-    // quiz's own brand logo alongside it (e.g. Cerruti 1881, Palm
-    // Angels). With only a company logo, it's centered exactly as
-    // before; with both, they sit side by side with a gap between them,
-    // each fit within its own box, aspect ratio always preserved.
+    // ---- Path B: the built-in drawn layout ----
+    // A red double-line border frame, matching the reference's red
+    // border rather than the previous version's gold one.
+    doc.setDrawColor(140, 30, 30);
+    doc.setLineWidth(3);
+    doc.rect(20, 20, pageWidth - 40, pageHeight - 40);
+    doc.setLineWidth(1);
+    doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
+
+    let y = 75;
+
+    // Company logo, and — for a brand-specific quiz — that quiz's own
+    // brand logo alongside it (e.g. Cerruti 1881, Palm Angels). With
+    // only a company logo, it's centered; with both, they sit side by
+    // side, each fit within its own box, aspect ratio always preserved.
     const companyLogo = logoUrl ? await loadImageAsDataUrl(logoUrl) : null;
     const brandLogo = brandLogoUrl ? await loadImageAsDataUrl(brandLogoUrl) : null;
-
     if (companyLogo || brandLogo) {
-      const maxW = 100;
-      const maxH = 44;
-      const gap = 28;
-
+      const maxW = 90;
+      const maxH = 38;
+      const gap = 24;
       function fitted(logo: { dataUrl: string; width: number; height: number }) {
         const scale = Math.min(maxW / logo.width, maxH / logo.height);
         return { w: logo.width * scale, h: logo.height * scale };
       }
-
       if (companyLogo && brandLogo) {
         const c = fitted(companyLogo);
         const b = fitted(brandLogo);
         const totalW = c.w + gap + b.w;
         const startX = centerX - totalW / 2;
-        // Each logo sized independently, but both bottom-aligned to the
-        // same y — so a short, wide logo and a tall, narrow one still
-        // look like they belong on the same line, the way two logos in
-        // a letterhead normally would.
         doc.addImage(companyLogo.dataUrl, startX, y - c.h, c.w, c.h);
         doc.addImage(brandLogo.dataUrl, startX + c.w + gap, y - b.h, b.w, b.h);
-        y += 16;
+        y += 20;
       } else {
         const logo = (companyLogo ?? brandLogo)!;
         const f = fitted(logo);
         doc.addImage(logo.dataUrl, centerX - f.w / 2, y - f.h, f.w, f.h);
-        y += 16;
+        y += 20;
       }
     }
 
-    centered(orgName, y, { size: 14, bold: true, color: [201, 162, 75] });
-    y += 20;
-    centered(orgSubtitle, y, { size: 10, color: [120, 120, 120] });
-    y += 46;
-    centered("CERTIFICATE OF ACHIEVEMENT", y, { size: 24, bold: true });
-    y += 44;
-    centered("This certificate is proudly presented to", y, { size: 12, color: [90, 90, 90] });
+    // Stacked text header — org name large with a short red underline
+    // accent beneath it, subtitle smaller below, matching the reference
+    // design's "ILG" / "ACADEMY" treatment regardless of the exact words
+    // configured in Branding settings.
+    centered(orgName, y, { size: 22, bold: true, color: [90, 95, 105] });
+    doc.setDrawColor(140, 30, 30);
+    doc.setLineWidth(1.5);
+    doc.line(centerX - 55, y + 8, centerX + 55, y + 8);
+    y += 34;
+    centered(orgSubtitle, y, { size: 13, color: [90, 95, 105], tracked: true });
+    y += 55;
+
+    centered("CERTIFI\u00c9", y, { size: 15, color: [90, 95, 105], tracked: true });
     y += 40;
-    centered(certificate.participantName, y, { size: 28, bold: true, color: [201, 162, 75] });
-    y += 38;
-    centered("for successfully completing the", y, { size: 12, color: [90, 90, 90] });
-    y += 26;
-    centered(`${certificate.quizTitle} quiz`, y, { size: 15, bold: true });
-    y += 30;
-    centered("and achieving a score of", y, { size: 12, color: [90, 90, 90] });
-    y += 26;
-    centered(`${certificate.scorePercent}%`, y, { size: 20, bold: true, color: [201, 162, 75] });
-    y += 40;
-    // Custom per-quiz wording if the admin set one (with {name} filled
-    // in), otherwise the same default sentence as before.
-    const achievementText = (
-      message || "This achievement demonstrates {name}'s successful understanding of the key knowledge and learning objectives covered in the training."
-    ).replace(/\{name\}/gi, certificate.participantName);
-    const achievementLine = doc.splitTextToSize(achievementText, pageWidth - 180) as string[];
-    achievementLine.forEach((line) => {
-      centered(line, y, { size: 10.5, color: [90, 90, 90] });
-      y += 15;
+    centered(certificate.quizTitle.toUpperCase(), y, { size: 26, bold: true, color: [140, 30, 30] });
+    y += 34;
+    centered("D\u00c9CERN\u00c9 \u00c0", y, { size: 12, color: [60, 60, 60], tracked: true });
+    y += 45;
+
+    centered(certificate.participantName, y, { size: 22, bold: true, color: [40, 40, 40] });
+    y += 8;
+    doc.setDrawColor(150, 150, 150);
+    doc.setLineWidth(0.75);
+    doc.line(centerX - 160, y, centerX + 160, y);
+    y += 34;
+
+    const achievementLines = doc.splitTextToSize(achievementText.toUpperCase(), pageWidth - 260) as string[];
+    achievementLines.forEach((line) => {
+      centered(line, y, { size: 11, color: [50, 50, 50] });
+      y += 16;
     });
+    y += 20;
 
-    // Footer: date/time (left) and certificate number (right), on the actual completion timestamp
-    const footerY = pageHeight - 60;
+    // A simple decorative watch-dial motif -- concentric circles and
+    // hour ticks in a faint tone, evoking a chronograph face the way
+    // the reference does, without attempting to recreate its detailed
+    // illustration exactly.
+    const dialCenterY = y + 55;
+    doc.setDrawColor(225, 205, 205);
+    doc.setLineWidth(1);
+    doc.circle(centerX, dialCenterY, 58, "S");
+    doc.circle(centerX, dialCenterY, 48, "S");
+    for (let i = 0; i < 12; i++) {
+      const angle = (i * 30 * Math.PI) / 180;
+      const x1 = centerX + 52 * Math.sin(angle);
+      const y1 = dialCenterY - 52 * Math.cos(angle);
+      const x2 = centerX + 58 * Math.sin(angle);
+      const y2 = dialCenterY - 58 * Math.cos(angle);
+      doc.line(x1, y1, x2, y2);
+    }
+    y = dialCenterY + 70;
+
+    // A simple wax-seal approximation: a filled dark red circle with a
+    // lighter ring and the organization's initials inside. Not a real
+    // wax texture -- that needs an actual image asset (see the
+    // certificate background upload option in Branding settings for a
+    // fully custom design instead).
+    const sealY = y + 26;
+    doc.setFillColor(120, 20, 25);
+    doc.circle(centerX, sealY, 24, "F");
+    doc.setDrawColor(160, 60, 60);
+    doc.setLineWidth(1);
+    doc.circle(centerX, sealY, 18, "S");
+    const initials = orgName
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join("")
+      .slice(0, 3)
+      .toUpperCase();
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(190, 140, 140);
+    doc.text(initials, centerX, sealY + 4, { align: "center" });
+    y = sealY + 50;
+
+    if (location) {
+      centered(location.toUpperCase(), y, { size: 8.5, color: [90, 90, 90] });
+      y += 12;
+    }
+
+    // Footer: date (left) and a signature line (right) -- a simple
+    // placeholder flourish stands in for a real signature for now,
+    // easy to swap for a scanned one via the certificate background
+    // upload option once you have one.
+    const footerY = pageHeight - 55;
+    doc.setDrawColor(90, 90, 90);
+    doc.setLineWidth(0.75);
+    doc.line(70, footerY, 230, footerY);
+    doc.line(pageWidth - 230, footerY, pageWidth - 70, footerY);
+
+    doc.setFont("helvetica", "italic");
+    doc.setFontSize(16);
+    doc.setTextColor(60, 60, 90);
+    doc.text("A.", pageWidth - 190, footerY - 10);
+    doc.setLineWidth(1);
+    doc.line(pageWidth - 175, footerY - 14, pageWidth - 150, footerY - 20);
+    doc.line(pageWidth - 150, footerY - 20, pageWidth - 120, footerY - 8);
+
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(90, 90, 90);
-    doc.text(`Date: ${completedDate.toLocaleDateString()}`, 70, footerY);
-    doc.text(`Time: ${completedDate.toLocaleTimeString()}`, 70, footerY + 16);
-    doc.text(`Certificate No. ${certificate.certificateNumber}`, pageWidth - 70, footerY, { align: "right" });
+    doc.text(completedDate.toLocaleDateString("fr-FR"), 150, footerY + 14, { align: "center" });
+    doc.text("DATE", 150, footerY + 26, { align: "center" });
+    doc.text("DIRECTEUR ACADÉMIQUE", pageWidth - 150, footerY + 26, { align: "center" });
 
-    const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
     doc.save(`ILG_Academy_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
   }
 

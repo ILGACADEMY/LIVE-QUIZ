@@ -1356,6 +1356,37 @@ Files: `src/app/play/[sessionId]/results/page.tsx`,
 `src/app/api/sessions/[id]/certificate/route.ts`,
 `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
 
+## 55. Fixed: backtracking to the join page created a second, phantom registration
+
+Real bug, and I traced it to its actual root cause before fixing it: the
+join page never checked whether this browser had already joined this
+exact session before showing the registration form again. Hitting the
+back button after joining, then resubmitting, created a genuinely
+separate second participant every time — and since mobile/email is off
+by default (no contact info to recognize a repeat submission by), there
+was nothing catching it server-side either.
+
+**This is also exactly why the auto-reveal ("once everyone's answered")
+was silently getting stuck**: the count of "everyone" includes every
+joined participant row, including a phantom duplicate that will never
+submit an answer — so the room would sit waiting for the full timer to
+expire instead of revealing the moment the real people finished,
+confirmed by reading the actual logic rather than assuming.
+
+**Fixed at the source**: the join page already stores the participant's
+ID in this browser tab's storage right after a successful join — it now
+actually checks that on load, and if this tab already joined this
+session, skips the form entirely and goes straight back into the quiz,
+instead of ever reaching a state where resubmitting could happen.
+
+**Known remaining edge case**: this only protects within the same
+browser tab — someone joining from a second device, or a cleared
+browser, still isn't recognized as the same person without turning on
+"Require mobile/email on join" for that specific quiz, which remains
+the tool for that scenario.
+
+Files: `src/app/join/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

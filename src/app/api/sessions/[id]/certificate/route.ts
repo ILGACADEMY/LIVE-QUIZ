@@ -64,13 +64,15 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // certificate for the same participant.
   const { data: appSettings } = await supabaseAdmin
     .from("app_settings")
-    .select("logo_url, certificate_org_name, certificate_org_subtitle")
+    .select("logo_url, certificate_org_name, certificate_org_subtitle, certificate_location, certificate_background_url")
     .limit(1)
     .maybeSingle();
   const branding = {
     logoUrl: appSettings?.logo_url ?? null,
     orgName: appSettings?.certificate_org_name ?? "ILG ACADEMY",
     orgSubtitle: appSettings?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
+    location: appSettings?.certificate_location ?? null,
+    backgroundUrl: appSettings?.certificate_background_url ?? null,
     message: quiz.certificate_message ?? null,
     brandLogoUrl: quiz.brand_logo_url ?? null
   };

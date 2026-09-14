@@ -23,6 +23,24 @@ export default function JoinPage({ params }: { params: { sessionId: string } }) 
   const [requireContactInfo, setRequireContactInfo] = useState(false);
 
   useEffect(() => {
+    // The actual fix for double registration: if this browser tab
+    // already joined this exact session (the join page writes this to
+    // sessionStorage right before redirecting to /play), hitting the
+    // back button and landing here again must resume that same
+    // participant, not show a blank form that creates a brand-new one
+    // on submit. Without this check, someone backtracking created a
+    // second, entirely separate participant every time — and since
+    // Name/Store/City alone (no mobile/email, the default) gives the
+    // server nothing to recognize them by, nothing caught it there
+    // either. A phantom duplicate that never answers is also why "reveal
+    // once everyone's answered" would silently wait for a full timeout
+    // instead of firing early — it never accounts for real people.
+    const existing = sessionStorage.getItem(`ilg-quiz-${params.sessionId}`);
+    if (existing) {
+      router.replace(`/play/${params.sessionId}`);
+      return;
+    }
+
     setAvatar(randomAvatar());
     if (typeof navigator !== "undefined") setLanguage(detectSupportedLanguage(navigator.language));
     fetch(`/api/sessions/${params.sessionId}/state`)
