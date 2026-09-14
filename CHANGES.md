@@ -1081,6 +1081,131 @@ Files: `src/components/shared/MeridianWordmark.tsx`,
 `src/app/api/sessions/[id]/state/route.ts`, `src/lib/ai.ts`,
 `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
 
+## 49. Major update: result page hierarchy, personalization, real PDF fix, and a full certificate system
+
+Implementing the detailed spec covering result presentation, AI-result
+language handling, PDF fixes, and automatic certificates. Full report:
+
+### PDF — what caused it and how it was fixed
+The "Download PDF" button was calling the browser's native `window.print()`
+dialog, not generating a file. That depends on the person noticing and
+manually choosing "Save as PDF" as the print destination — unreliable on
+phones, and often silently broken inside an in-app browser (e.g. a
+QR-scanner app's built-in webview), which is most of this app's actual
+usage. **Fixed** with `jspdf`, generating and downloading a real `.pdf`
+file directly, no dialog involved. **Caught and fixed a second, more
+subtle problem while verifying this**: `tsc --noEmit` passed cleanly
+even when `jspdf` wasn't actually installed in `node_modules` — a type
+check alone doesn't catch a missing runtime dependency. Only running the
+actual PDF generation code surfaced this. Also verified `npm ci` (what
+Vercel's build actually runs, stricter than `npm install`) succeeds with
+the updated lockfile — this is the check that would have caught a
+"Cannot find module" failure at deploy time before it happened.
+
+### Results — base score, percentage, and where they're shown
+Base Score is `correct answers / total questions` (e.g. 4/7) — shown
+inside a hand-drawn-style circle (an irregular hand-plotted SVG path, not
+a perfect geometric shape), matching a teacher circling a grade. Score
+(percentage) is `correct/total × 100`, rounded, shown separately and
+prominently below it. Hierarchy on the results page now reads: Name →
+Base Score (circled) → Score % → Correct/Incorrect/Total/Pass
+mark/Points/Rank/Time → PASSED/NOT PASSED — with the pre-existing points
+and rank metrics kept, not removed.
+
+### AI results — confirmed unchanged, only the language changed
+The actual prompt logic — how strengths/weaknesses are identified,
+category and topic selection, the recommendation criteria — was not
+touched. Two additive, minimal changes only: (1) a `languageName`
+parameter tells the model to write its response natively in the
+participant's selected language rather than always English, so there is
+only ever one generation, never a translate-afterward step and never a
+second, different analysis; (2) the participant's real name is now
+passed in and referenced naturally instead of "the trainee"/"this
+trainee". Both the results page and the result PDF read from the exact
+same generated profile object — never two separate generations.
+
+### Personalization
+The registered name (`participants.name`, entered once at join, never
+re-entered) flows through: the results page heading (now "**[Name]'s**
+Learning Profile"), the AI profile's own prose, the result PDF, and the
+certificate. Same source of truth throughout, no separate name field
+anywhere.
+
+### Pass mark
+Already existed as a per-quiz setting before this update (Settings &
+scoring → Pass mark %) — confirmed working, not newly added.
+Pass/fail is `percentage >= pass_mark_percent`, so a percentage exactly
+equal to the pass mark passes, as specified.
+
+**Historical integrity — confirmed already guaranteed, not newly built.**
+Every session freezes a full snapshot of the quiz's settings (including
+pass mark) the instant it's launched, and every score/pass-fail
+calculation for that session reads only from that frozen snapshot, never
+the quiz's current live settings. A later admin edit to the quiz cannot
+retroactively change an already-run session's results or certificates.
+I verified this by reading the actual code path rather than assuming it.
+
+### Certificates — new
+- New quiz setting: "Issue certificate on passing" (Advanced settings,
+  off by default).
+- A `certificates` table plus a dedicated Postgres function
+  (`next_certificate_number()`) wrapping a real sequence — this is what
+  makes certificate numbers (`ILG-2026-000124` format) collision-proof
+  even if two participants finish in the same instant, without a
+  retry-on-conflict loop.
+- Issuance is idempotent: calling the eligibility check again for someone
+  who already has a certificate returns the same one, never a second.
+- Eligibility is computed from the session's frozen snapshot and the
+  participant's actual recorded answers — never the quiz's current
+  settings — so a certificate already issued can't be invalidated by a
+  later settings change, and a session where certificates weren't
+  enabled at launch time can't retroactively start issuing them either.
+- A dedicated landscape certificate PDF (separate from the results PDF)
+  with the exact requested wording, the real completion timestamp (never
+  today's date or the quiz's creation date), and the certificate number.
+- Shown on the results page as "Certificate of Achievement — Certificate
+  Issued — Download Certificate" only when actually eligible.
+
+### Presenter / QR screen
+- Leaderboard wordmark enlarged for projector visibility.
+- QR panel logo: now sized to fill 80% of a defined box (previously an
+  arbitrary size with a lot of empty margin around it), aspect ratio
+  preserved.
+- QR panel logo moved to align with the left edge of the "Scan to join"
+  text below it — this was a real, findable bug: the wordmark centered
+  itself independently of the left-aligned text underneath it, which is
+  exactly why they looked misaligned. Added an `align` prop
+  (`MeridianWordmark`) specifically to fix this rather than a one-off
+  positioning hack.
+- Added a subtle vertical divider between the logo box and "Meridian",
+  reading as `[ LOGO ] | [ MERIDIAN ]`.
+
+### What "tested" means here, honestly
+This sandbox has no live Supabase project, no real Anthropic key, and no
+browser — so I cannot click through the actual live app the way a person
+would. What I verified concretely: full TypeScript compilation across
+every changed file; the PDF and certificate generation code actually
+executed (not just type-checked) and produced real, valid PDF files
+(confirmed by file size and the `%PDF` binary header); `npm ci` succeeds
+with the updated lockfile, which is the specific check that would have
+caught the jsPDF dependency gap before a real deployment did. What I did
+*not* do: click through the live join → quiz → results → certificate
+flow in a real browser against a real database. If anything behaves
+unexpectedly once you test it live, that's the most likely place for a
+surprise, and I'd want to know immediately if so.
+
+Files: `src/app/play/[sessionId]/results/page.tsx`,
+`src/components/participant/ScoreCircle.tsx` (new),
+`src/app/api/sessions/[id]/certificate/route.ts` (new),
+`src/app/api/sessions/[id]/results/route.ts`, `src/lib/ai.ts`,
+`src/app/api/ai/analysis/route.ts`, `src/components/admin/QuizEditor.tsx`,
+`src/lib/types.ts`, `src/app/api/quizzes/route.ts`,
+`src/components/shared/MeridianWordmark.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`,
+`src/app/leaderboard/[sessionId]/page.tsx`, `package.json`,
+`package-lock.json`, `supabase/schema.sql`,
+`supabase/upgrade_existing_database.sql`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

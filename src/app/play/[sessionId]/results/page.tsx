@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { jsPDF } from "jspdf";
+import ScoreCircle from "@/components/participant/ScoreCircle";
 
 interface Breakdown {
   questionIndex: number;
@@ -18,10 +20,12 @@ interface Breakdown {
 interface ResultsData {
   quizTitle: string;
   name: string;
+  completedAt: string | null;
   totalScore: number;
   baseScore: number;
   speedBonus: number;
   percentage: number;
+  passMarkPercent: number;
   passed: boolean;
   timeSeconds: number | null;
   aiFeedbackEnabled: boolean;
@@ -59,6 +63,13 @@ export default function ResultsPage({
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [certificate, setCertificate] = useState<{
+    certificateNumber: string;
+    participantName: string;
+    quizTitle: string;
+    scorePercent: number;
+    issuedAt: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!participantId) {
@@ -76,6 +87,25 @@ export default function ResultsPage({
     fetch(`/api/sessions/${params.sessionId}/leaderboard?participantId=${participantId}`)
       .then((r) => r.json())
       .then((d) => setRank(d.yourRank?.rank ?? null))
+      .catch(() => {});
+
+    // Certificate eligibility/issuance — safe to call unconditionally;
+    // the route itself decides eligibility (passed + the quiz's own
+    // "issue certificate" setting) and returns eligible:false otherwise,
+    // so this never shows anything for a quiz that doesn't use it.
+    fetch(`/api/sessions/${params.sessionId}/certificate?participantId=${participantId}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.eligible) {
+          setCertificate({
+            certificateNumber: d.certificateNumber,
+            participantName: d.participantName,
+            quizTitle: d.quizTitle,
+            scorePercent: d.scorePercent,
+            issuedAt: d.issuedAt
+          });
+        }
+      })
       .catch(() => {});
   }, [params.sessionId, participantId]);
 
@@ -120,6 +150,170 @@ export default function ResultsPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
+  // A REAL downloaded PDF file, not window.print() — the old approach
+  // routed through the browser's print dialog and depended on the
+  // person noticing and picking "Save as PDF" as the destination, which
+  // is not obvious on most phones and often doesn't work at all inside
+  // an in-app browser (e.g. a QR-scanner app's built-in webview). This
+  // builds and downloads an actual .pdf directly, no dialog involved.
+  function downloadPdf() {
+    if (!data) return;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    let y = 56;
+
+    function addText(text: string, opts: { size?: number; bold?: boolean; color?: [number, number, number]; gap?: number } = {}) {
+      const { size = 11, bold = false, color = [20, 20, 20], gap = 16 } = opts;
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.setFontSize(size);
+      doc.setTextColor(color[0], color[1], color[2]);
+      const wrapped = doc.splitTextToSize(text, pageWidth - margin * 2) as string[];
+      wrapped.forEach((line) => {
+        if (y > pageHeight - 60) {
+          doc.addPage();
+          y = 56;
+        }
+        doc.text(line, margin, y);
+        y += gap;
+      });
+    }
+
+    const correctCount = data.breakdown.filter((b) => b.isCorrect).length;
+    const incorrectCount = data.breakdown.length - correctCount;
+    const completedDate = data.completedAt ? new Date(data.completedAt) : null;
+
+    addText("ILG Academy", { size: 12, bold: true, gap: 18 });
+    addText(data.quizTitle, { size: 18, bold: true, gap: 24 });
+    addText(`Participant: ${data.name}`, { size: 12, gap: 16 });
+    if (completedDate) {
+      addText(`Completed: ${completedDate.toLocaleDateString()} at ${completedDate.toLocaleTimeString()}`, { size: 10, color: [110, 110, 110], gap: 22 });
+    }
+
+    addText("Base Score", { size: 11, bold: true, gap: 15 });
+    addText(`${correctCount} / ${data.breakdown.length}`, { size: 16, bold: true, gap: 20 });
+    addText("Score", { size: 11, bold: true, gap: 15 });
+    addText(`${data.percentage}%`, { size: 16, bold: true, gap: 22 });
+
+    addText(`Correct answers: ${correctCount}`);
+    addText(`Incorrect answers: ${incorrectCount}`);
+    addText(`Total questions: ${data.breakdown.length}`);
+    addText(`Pass mark: ${data.passMarkPercent}%`);
+    addText(`Result: ${data.passed ? "PASSED" : "NOT PASSED"}`, { bold: true });
+    addText(`Certificate: ${certificate ? "Issued" : "Not Issued"}`);
+    addText(`Points (with speed bonus): ${data.totalScore}`);
+    if (rank) addText(`Rank: #${rank}`);
+    addText(`Time taken: ${formatTime(data.timeSeconds)}`, { gap: 26 });
+
+    if (data.categoryBreakdown.length > 0) {
+      addText("Knowledge by category", { size: 14, bold: true, gap: 20 });
+      data.categoryBreakdown.forEach((c) => {
+        const pct = Math.round((c.correct / c.total) * 100);
+        addText(`${c.category}: ${c.correct}/${c.total} (${pct}%)`);
+      });
+      y += 10;
+    }
+
+    if (profile) {
+      addText(data.name ? `${data.name}'s Learning Profile` : "Learning Profile", { size: 14, bold: true, gap: 20 });
+      if (profile.summary) addText(profile.summary, { gap: 15 });
+      if (profile.strong.length) addText(`Strong categories: ${profile.strong.join(", ")}`);
+      if (profile.improve.length) addText(`Categories to improve: ${profile.improve.join(", ")}`);
+      if (profile.focusTopics.length) addText(`Concentrate on: ${profile.focusTopics.join(", ")}`);
+      if (profile.recommendation) addText(profile.recommendation, { gap: 22 });
+    }
+
+    addText("Question review", { size: 14, bold: true, gap: 20 });
+    data.breakdown.forEach((b, i) => {
+      addText(`${i + 1}. ${b.questionText}`, { bold: true });
+      addText(`Your answer: ${b.selectedText}${b.isCorrect ? " (Correct)" : ""}`, { size: 10 });
+      if (!b.isCorrect) addText(`Correct answer: ${b.correctText}`, { size: 10 });
+      if (b.explanation) addText(b.explanation, { size: 10, color: [110, 110, 110] });
+      if (feedback[b.questionIndex]) addText(feedback[b.questionIndex], { size: 10, color: [110, 110, 110] });
+      y += 8;
+    });
+
+    // ILG_Academy_[Participant_Name]_[Quiz_Name]_Result.pdf, with spaces
+    // and anything non-alphanumeric collapsed to underscores so the
+    // filename is always safe regardless of what's in either string.
+    const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    doc.save(`ILG_Academy_${safe(data.name)}_${safe(data.quizTitle)}_Result.pdf`);
+  }
+
+  // Certificate — a separate, dedicated PDF from the results one above,
+  // styled as an actual certificate rather than a data report. Every
+  // value on it (name, quiz, score, date/time, certificate number) comes
+  // from what /api/sessions/:id/certificate already issued and returned
+  // — nothing is entered manually, and the date/time is the participant's
+  // real completion timestamp, never today's date or the quiz's
+  // creation date.
+  function downloadCertificate() {
+    if (!certificate || !data) return;
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const centerX = pageWidth / 2;
+
+    // Decorative border
+    doc.setDrawColor(201, 162, 75); // gold
+    doc.setLineWidth(2);
+    doc.rect(24, 24, pageWidth - 48, pageHeight - 48);
+    doc.setLineWidth(0.75);
+    doc.rect(32, 32, pageWidth - 64, pageHeight - 64);
+
+    function centered(text: string, y: number, opts: { size?: number; bold?: boolean; color?: [number, number, number] } = {}) {
+      const { size = 12, bold = false, color = [30, 30, 30] } = opts;
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      doc.setFontSize(size);
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.text(text, centerX, y, { align: "center" });
+    }
+
+    const completedDate = certificate.issuedAt ? new Date(data.completedAt ?? certificate.issuedAt) : new Date();
+
+    let y = 90;
+    centered("ILG ACADEMY", y, { size: 14, bold: true, color: [201, 162, 75] });
+    y += 20;
+    centered("TRAINING & DEVELOPMENT", y, { size: 10, color: [120, 120, 120] });
+    y += 46;
+    centered("CERTIFICATE OF ACHIEVEMENT", y, { size: 24, bold: true });
+    y += 44;
+    centered("This certificate is proudly presented to", y, { size: 12, color: [90, 90, 90] });
+    y += 40;
+    centered(certificate.participantName, y, { size: 28, bold: true, color: [201, 162, 75] });
+    y += 38;
+    centered("for successfully completing the", y, { size: 12, color: [90, 90, 90] });
+    y += 26;
+    centered(`${certificate.quizTitle} quiz`, y, { size: 15, bold: true });
+    y += 30;
+    centered("and achieving a score of", y, { size: 12, color: [90, 90, 90] });
+    y += 26;
+    centered(`${certificate.scorePercent}%`, y, { size: 20, bold: true, color: [201, 162, 75] });
+    y += 40;
+    const achievementLine = doc.splitTextToSize(
+      `This achievement demonstrates ${certificate.participantName}'s successful understanding of the key knowledge ` +
+        "and learning objectives covered in the training.",
+      pageWidth - 180
+    ) as string[];
+    achievementLine.forEach((line) => {
+      centered(line, y, { size: 10.5, color: [90, 90, 90] });
+      y += 15;
+    });
+
+    // Footer: date/time (left) and certificate number (right), on the actual completion timestamp
+    const footerY = pageHeight - 60;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(90, 90, 90);
+    doc.text(`Date: ${completedDate.toLocaleDateString()}`, 70, footerY);
+    doc.text(`Time: ${completedDate.toLocaleTimeString()}`, 70, footerY + 16);
+    doc.text(`Certificate No. ${certificate.certificateNumber}`, pageWidth - 70, footerY, { align: "right" });
+
+    const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    doc.save(`ILG_Academy_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
+  }
+
   if (error) {
     return (
       <main className="min-h-screen flex items-center justify-center px-6 text-center">
@@ -139,7 +333,7 @@ export default function ResultsPage({
 
         <div className="flex flex-col items-center gap-2 mb-8 no-print">
           <button
-            onClick={() => window.print()}
+            onClick={downloadPdf}
             disabled={aiLoading}
             className="btn-ghost text-sm px-5 py-2.5 disabled:opacity-50"
           >
@@ -149,12 +343,34 @@ export default function ResultsPage({
         </div>
 
         <div className="case-panel p-8 text-center mb-6">
-          <p className="font-dial text-5xl text-gold mb-2">{data.totalScore}</p>
-          <p className="text-parchment/50 text-sm mb-6">points</p>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <p className="field-label mb-2">Base Score</p>
+          <div className="flex items-center justify-center mb-5">
+            <ScoreCircle correct={data.breakdown.filter((b) => b.isCorrect).length} total={data.breakdown.length} />
+          </div>
+
+          <p className="field-label mb-2">Score</p>
+          <p className="font-dial text-5xl text-gold mb-6">{data.percentage}%</p>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-left border-t border-hairline pt-6">
             <div>
-              <p className="field-label mb-1">Percentage</p>
-              <p className="font-dial text-lg">{data.percentage}%</p>
+              <p className="field-label mb-1">Correct answers</p>
+              <p className="font-dial text-lg">{data.breakdown.filter((b) => b.isCorrect).length}</p>
+            </div>
+            <div>
+              <p className="field-label mb-1">Incorrect answers</p>
+              <p className="font-dial text-lg">{data.breakdown.filter((b) => !b.isCorrect).length}</p>
+            </div>
+            <div>
+              <p className="field-label mb-1">Total questions</p>
+              <p className="font-dial text-lg">{data.breakdown.length}</p>
+            </div>
+            <div>
+              <p className="field-label mb-1">Pass mark</p>
+              <p className="font-dial text-lg">{data.passMarkPercent}%</p>
+            </div>
+            <div>
+              <p className="field-label mb-1">Points (with bonus)</p>
+              <p className="font-dial text-lg">{data.totalScore}</p>
             </div>
             <div>
               <p className="field-label mb-1">Your rank</p>
@@ -165,10 +381,21 @@ export default function ResultsPage({
               <p className="font-dial text-lg">{formatTime(data.timeSeconds)}</p>
             </div>
           </div>
-          <p className={`mt-6 text-sm font-semibold ${data.passed ? "text-gold" : "text-crimson"}`}>
-            {data.passed ? "Passed" : "Below pass mark"}
+          <p className={`mt-6 text-base font-semibold ${data.passed ? "text-gold" : "text-crimson"}`}>
+            {data.passed ? "PASSED" : "NOT PASSED"}
           </p>
         </div>
+
+        {certificate && (
+          <div className="case-panel p-6 mb-6 text-center border-gold/40">
+            <p className="font-display italic text-xl text-gold mb-1">Certificate of Achievement</p>
+            <p className="text-parchment/60 text-sm mb-1">Certificate Issued</p>
+            <p className="text-parchment/30 text-xs mb-4 font-dial">{certificate.certificateNumber}</p>
+            <button onClick={downloadCertificate} className="btn-gold text-sm px-5 py-2.5">
+              Download Certificate
+            </button>
+          </div>
+        )}
 
         {data.speedBonus > 0 && (
           <div className="case-panel p-5 mb-6 text-sm flex justify-between">
@@ -185,7 +412,7 @@ export default function ResultsPage({
 
         {profile && (
           <div className="case-panel p-6 mb-6">
-            <p className="field-label mb-4">Your learning profile</p>
+            <p className="field-label mb-4">{data.name ? `${data.name}\u2019s Learning Profile` : "Your Learning Profile"}</p>
             {profile.summary && <p className="text-sm text-parchment/80 leading-relaxed mb-4">{profile.summary}</p>}
             {profile.strong.length > 0 && (
               <p className="text-sm mb-2">

@@ -265,6 +265,21 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                     English only — the language picker is hidden on the join screen entirely.
                   </p>
                 )}
+                <Toggle
+                  label="Issue certificate on passing"
+                  checked={quiz.issue_certificate}
+                  onChange={(v) => setQuizField("issue_certificate", v)}
+                />
+                {quiz.issue_certificate ? (
+                  <p className="text-xs text-parchment/40 -mt-2 mb-2 ml-1">
+                    A participant who meets the pass mark above gets a downloadable Certificate of Achievement
+                    offered on their results page automatically — nothing for you to do per participant.
+                  </p>
+                ) : (
+                  <p className="text-xs text-parchment/30 -mt-2 mb-2 ml-1">
+                    Off by default. Turn on to automatically offer a certificate to anyone who passes this quiz.
+                  </p>
+                )}
                 <Toggle label="Randomize questions" checked={quiz.randomize_questions} onChange={(v) => setQuizField("randomize_questions", v)} />
                 <Toggle label="Randomize answers" checked={quiz.randomize_answers} onChange={(v) => setQuizField("randomize_answers", v)} />
                 <Toggle label="Allow back navigation" checked={quiz.back_navigation_enabled} onChange={(v) => setQuizField("back_navigation_enabled", v)} />

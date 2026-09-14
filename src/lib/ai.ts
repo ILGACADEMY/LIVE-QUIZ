@@ -46,9 +46,12 @@ export async function generateWrongAnswerFeedback(params: {
 /** A single participant's end-of-quiz learning profile (spec §32). */
 export async function generateLearningProfile(params: {
   quizTitle: string;
+  participantName: string;
   categoryBreakdown: { category: string; correct: number; total: number }[];
   topicBreakdown: { topic: string; correct: number; total: number }[];
+  languageName?: string; // defaults to English; the profile is written natively in this language, not translated afterward
 }): Promise<{ summary: string; strong: string[]; improve: string[]; focusTopics: string[]; recommendation: string }> {
+  const languageName = params.languageName ?? "English";
   const msg = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 700,
@@ -56,6 +59,9 @@ export async function generateLearningProfile(params: {
       "You analyze a luxury watch retail trainee's quiz performance, broken down both by broad category and by " +
       "specific learning topic, and return ONLY valid JSON, no preamble, no markdown fences, matching exactly: " +
       '{"summary": string, "strong": string[], "improve": string[], "focusTopics": string[], "recommendation": string}. ' +
+      `Write every string value in ${languageName}, not English, unless ${languageName} is English. ` +
+      `Refer to the trainee by their actual name, ${params.participantName}, wherever you would otherwise write ` +
+      '"the trainee" or "this trainee" — naturally, not in every single sentence. ' +
       "summary is a substantive 3-5 sentence overview of this trainee's actual knowledge level on THIS course's " +
       "content — reference the real percentage figures given to you for each category, name specific strengths and " +
       "gaps rather than speaking generically, and describe what the pattern of results suggests about their " +

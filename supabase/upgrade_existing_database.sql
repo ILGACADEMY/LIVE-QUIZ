@@ -70,3 +70,27 @@ create table if not exists instruction_translations (
   created_at     timestamptz not null default now(),
   primary key (session_id, language_code)
 );
+
+-- ============ certificates ============
+alter table quizzes add column if not exists issue_certificate boolean not null default false;
+
+create sequence if not exists certificate_number_seq start 1;
+
+create or replace function next_certificate_number()
+returns text
+language sql
+as $$
+  select 'ILG-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('certificate_number_seq')::text, 6, '0');
+$$;
+
+create table if not exists certificates (
+  id                  uuid primary key default gen_random_uuid(),
+  session_id          uuid not null references sessions(id) on delete cascade,
+  participant_id      uuid not null references participants(id) on delete cascade,
+  certificate_number  text not null unique,
+  quiz_title          text not null,
+  participant_name    text not null,
+  score_percent       int not null,
+  issued_at           timestamptz not null default now(),
+  unique (session_id, participant_id)
+);

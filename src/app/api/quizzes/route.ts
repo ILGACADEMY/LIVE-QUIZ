@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       question_timer_seconds: body.question_timer_seconds ?? 20,
       translation_enabled: body.translation_enabled ?? false,
       require_contact_info: body.require_contact_info ?? false,
+      issue_certificate: body.issue_certificate ?? false,
       after_answer_mode: body.after_answer_mode ?? "auto_advance",
       status: "draft"
     })

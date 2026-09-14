@@ -25,7 +25,8 @@ create table if not exists quizzes (
   speed_bonus_window_seconds int not null default 20,
   question_timer_seconds    int  not null default 20, -- how long each question stays open in a LIVE session (all scoring modes) before auto-reveal
   translation_enabled       boolean not null default false, -- OFF by default: AI translation costs money per question per language, so it only runs for quizzes that explicitly opt in
-  require_contact_info      boolean not null default false, -- OFF by default: mobile/email fields hidden on join for casual quizzes; turn on for a real competition needing duplicate-prevention  after_answer_mode         text not null default 'auto_advance'
+  require_contact_info      boolean not null default false, -- OFF by default: mobile/email fields hidden on join for casual quizzes; turn on for a real competition needing duplicate-prevention
+  issue_certificate         boolean not null default false, -- OFF by default: when on, a participant who passes gets a certificate offered on their results page  after_answer_mode         text not null default 'auto_advance'
                               check (after_answer_mode in ('auto_advance', 'next_button')), -- used by Preview only; a live session is always presenter-controlled
   status                    text not null default 'draft'
                               check (status in ('draft', 'published')),
@@ -181,6 +182,43 @@ create table if not exists instruction_translations (
   primary key (session_id, language_code)
 );
 alter table instruction_translations enable row level security;
+
+-- ---------------------------------------------------------------------------
+-- Certificates — one row per issued certificate, ever. certificate_number is
+-- globally unique and never reused, generated from a real sequence (not
+-- "count existing rows + 1", which would race and collide under
+-- concurrent finishes). The pass mark that actually applied is captured
+-- here at issue time via quiz_title/score_percent — combined with the
+-- fact that quiz_snapshot itself is already frozen per session at launch
+-- (see sessions.quiz_snapshot), a later change to a quiz's pass mark or
+-- certificate setting can never retroactively alter or invalidate a
+-- certificate that was already issued.
+-- ---------------------------------------------------------------------------
+create sequence if not exists certificate_number_seq start 1;
+
+-- Wraps the sequence increment + formatting in one atomic call, so two
+-- participants finishing at the same instant can never be handed the
+-- same certificate number — Postgres sequences guarantee that on their
+-- own, this function just does the formatting on top.
+create or replace function next_certificate_number()
+returns text
+language sql
+as $$
+  select 'ILG-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('certificate_number_seq')::text, 6, '0');
+$$;
+
+create table if not exists certificates (
+  id                  uuid primary key default gen_random_uuid(),
+  session_id          uuid not null references sessions(id) on delete cascade,
+  participant_id      uuid not null references participants(id) on delete cascade,
+  certificate_number  text not null unique,
+  quiz_title          text not null,
+  participant_name    text not null,
+  score_percent       int not null,
+  issued_at           timestamptz not null default now(),
+  unique (session_id, participant_id)
+);
+alter table certificates enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Row Level Security

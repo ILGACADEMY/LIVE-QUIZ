@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { generateLearningProfile, generateQuizPerformanceAnalysis } from "@/lib/ai";
+import { languageName } from "@/lib/languages";
 import { LiveSession } from "@/lib/types";
 
 // POST /api/ai/analysis — { type: "profile", sessionId, participantId }
@@ -20,8 +21,10 @@ export async function POST(req: NextRequest) {
     try {
       const profile = await generateLearningProfile({
         quizTitle: results.quizTitle,
+        participantName: results.name,
         categoryBreakdown: results.categoryBreakdown,
-        topicBreakdown: results.topicBreakdown
+        topicBreakdown: results.topicBreakdown,
+        languageName: languageName(results.language ?? "en")
       });
       return NextResponse.json({ profile });
     } catch (err) {

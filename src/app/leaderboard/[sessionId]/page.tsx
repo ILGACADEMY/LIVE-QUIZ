@@ -79,7 +79,7 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
 
   return (
     <main className="min-h-screen px-10 py-14 flex flex-col items-center">
-      <MeridianWordmark size="small" />
+      <MeridianWordmark size="large" />
       <h1 className="font-display italic text-5xl mt-6 mb-2">Leaderboard</h1>
       {view === "top10" && (
         <p className="text-parchment/40 text-sm mb-8">

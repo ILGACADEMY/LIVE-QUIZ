@@ -198,10 +198,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({
     quizTitle: quiz.title,
     name: participant.name,
+    language: participant.language ?? "en",
+    completedAt: participant.completed_at,
     totalScore: participant.total_score,
     baseScore: participant.base_score,
     speedBonus: participant.speed_score,
     percentage,
+    passMarkPercent: quiz.pass_mark_percent,
     passed,
     timeSeconds,
     aiFeedbackEnabled: quiz.ai_feedback_enabled,

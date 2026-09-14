@@ -284,7 +284,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
               <QRCodeSVG value={joinUrl} size={340} bgColor="#F3EDE1" fgColor="#12100D" />
             </div>
             <div>
-              <MeridianWordmark size="large" />
+              <MeridianWordmark size="large" align="left" />
               <p className="font-display italic text-3xl mt-5 mb-3">Scan to join</p>
               <p className="text-parchment/50 text-lg break-all mb-2">{joinUrl}</p>
               {state.shortCode && (

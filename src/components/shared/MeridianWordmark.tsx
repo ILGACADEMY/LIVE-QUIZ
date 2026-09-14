@@ -10,16 +10,20 @@ import { useEffect, useState } from "react";
  *  standalone wordmark. The thin rule with a center tick is a small
  *  literal nod to the name — a meridian is a line, so the mark gets one.
  *
- *  The company logo (if one's been uploaded) now renders directly next
- *  to this wordmark, not as a separate tiny strip pinned above every
- *  page — that older placement was too small and easy to miss, and ate
- *  vertical space on screens where every inch matters (a 16:9 presenter
- *  view, a phone's join screen). This fetches from the public /api/branding
- *  endpoint once on mount since this is a client component used inside
- *  other client pages (the join screen, the live presenter dashboard) —
- *  it can't be an async server component the way a page-level layout
- *  element could be. */
-export default function MeridianWordmark({ size = "large" }: { size?: "large" | "small" }) {
+ *  The company logo (if one's been uploaded) renders directly next to
+ *  this wordmark rather than as a separate tiny strip pinned above every
+ *  page. This fetches from the public /api/branding endpoint once on
+ *  mount since this is a client component used inside other client pages
+ *  (the join screen, the live presenter dashboard) — it can't be an
+ *  async server component the way a page-level layout element could be.
+ *
+ *  align="left" exists specifically for the QR waiting panel: that
+ *  panel's "Scan to join" text and URL sit left-aligned in their own
+ *  column, and this mark used to center itself independently of that,
+ *  producing a visible mismatch — the logo box floated centered while
+ *  everything below it started at the column's left edge. align="left"
+ *  makes this row start at that same edge instead. */
+export default function MeridianWordmark({ size = "large", align = "center" }: { size?: "large" | "small"; align?: "center" | "left" }) {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -29,25 +33,30 @@ export default function MeridianWordmark({ size = "large" }: { size?: "large" | 
       .catch(() => {});
   }, []);
 
+  const boxSize = size === "large" ? "w-32 h-32 md:w-36 md:h-36" : "w-14 h-14";
+
   return (
-    <div className="flex flex-col items-center">
+    <div className={`flex flex-col ${align === "left" ? "items-start" : "items-center"}`}>
       <div className="flex items-center gap-5">
         {logoUrl && (
-          // A light chip behind the logo, regardless of the size prop —
-          // this is what actually makes it "vivid": a logo with its own
-          // transparent or dark background was blending straight into
-          // the page's charcoal, no matter how large it was rendered.
-          // Padding + a light background gives any uploaded logo real
-          // contrast and a defined edge, the same trick the QR code
-          // already uses for the same reason.
-          <div className="bg-ivory px-3 py-2 rounded-sm shadow-lg">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={logoUrl}
-              alt=""
-              className={size === "large" ? "h-24 md:h-28 w-auto object-contain" : "h-12 w-auto object-contain"}
-            />
-          </div>
+          <>
+            {/* A light chip behind the logo, sized as a defined box (not
+                just "however big the image happens to be") so the image
+                inside it can be sized to a specific fill ratio — 80% of
+                the box, not floating with a lot of empty margin around
+                a small logo. The background itself is what gives any
+                uploaded logo real contrast against the dark page,
+                regardless of the source image's own background. */}
+            <div className={`bg-ivory rounded-sm shadow-lg flex items-center justify-center ${boxSize}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={logoUrl} alt="" className="w-[80%] h-[80%] object-contain" />
+            </div>
+            {/* Divider between logo and wordmark — the visual partition
+                reading as [ LOGO ] | [ MERIDIAN ], subtle and matching
+                the app's own gold-on-dark language rather than looking
+                like a leftover default border. */}
+            <span className={size === "large" ? "w-px h-20 md:h-24 bg-gold/30" : "w-px h-10 bg-gold/30"} />
+          </>
         )}
         <h1
           className={`font-wordmark tracking-[0.08em] text-gold ${
@@ -57,7 +66,7 @@ export default function MeridianWordmark({ size = "large" }: { size?: "large" | 
           Meridian
         </h1>
       </div>
-      <div className="flex items-center gap-2 mt-3">
+      <div className={`flex items-center gap-2 mt-3 ${align === "left" ? "" : ""}`}>
         <span className="h-px w-10 bg-gold/40" />
         <span className="h-1.5 w-1.5 rounded-full bg-gold" />
         <span className="h-px w-10 bg-gold/40" />

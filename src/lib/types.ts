@@ -22,6 +22,7 @@ export interface Quiz {
   question_timer_seconds: number; // per-question active window, all scoring modes
   translation_enabled: boolean; // OFF by default — AI translation costs money per question per language, so it only runs when a quiz explicitly opts in
   require_contact_info: boolean; // OFF by default — mobile/email hidden on join for casual quizzes; on for a real competition needing duplicate-prevention
+  issue_certificate: boolean; // OFF by default — when on, a participant who passes gets a certificate offered on their results page
   after_answer_mode: AfterAnswerMode; // NOTE: no longer used for pacing — see README note in migration 002 patch guide. Kept on the type/schema so existing builder UI doesn't break; presenter always controls advancement now regardless of this setting.
   status: QuizStatus;
   created_at: string;
