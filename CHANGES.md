@@ -1387,6 +1387,108 @@ the tool for that scenario.
 
 Files: `src/app/join/[sessionId]/page.tsx`.
 
+## 56. Change language after already joining
+
+Language could previously only be chosen once, on the join form itself
+— no way to fix it if someone missed it or changed their mind after
+clicking Join. Added a language picker directly on the waiting screen
+(only shown for a quiz that has translation turned on), letting anyone
+change it right up until the quiz starts. The change applies going
+forward — whatever's already on screen stays as-is, but the waiting
+screen's instructions (and the first question, once it starts) pick up
+the new language on the very next check.
+
+Files: `src/app/api/sessions/[id]/participant-language/route.ts` (new),
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/app/play/[sessionId]/page.tsx`.
+
+## 57. Radar charts — self vs. own history for participants, self vs. group for admins only
+
+Built exactly the split we agreed on, after flagging a real architectural
+issue first: sessions (and everything in them) auto-delete 24 hours after
+they finish, which would have silently broken any "how did I do last
+time" comparison more than a day old. Fixed that properly rather than
+building on top of a foundation that would quietly fail — added a small,
+deliberately separate `quiz_attempt_history` table that survives that
+cleanup, written automatically whenever a session finishes (whether
+naturally or cut short early), for any participant with a mobile or
+email on file. A quiz without "Require mobile/email on join" turned on
+simply can't support this comparison — there's no reliable identity to
+match a future attempt against — and falls back gracefully instead of
+erroring.
+
+**Participant's own results page**: a radar chart of their category shape
+against their own most recent previous attempt of this same quiz, if one
+exists. Falls back to comparing against the pass mark otherwise (first
+attempt, or a quiz that doesn't collect contact info). Never a peer
+comparison here, on purpose — see the reasoning from a few messages back
+about why that's discouraging for anyone below average.
+
+**Admin dashboard, admin-only**: a separate radar in the group analysis
+section — pick any participant by name from a dropdown, see their shape
+against the group average for that session. This is the "self vs. group"
+comparison; it exists purely as a diagnostic for you to spot who needs a
+specific conversation, and is never visible to the participant.
+
+Both charts are a hand-drawn SVG component, consistent with this app's
+other charts (the score circle, the response distribution bars) rather
+than pulling in a charting library for one feature. Verified the
+underlying coordinate math directly (axis angles, point placement) rather
+than just trusting it by inspection — confirmed correct and free of any
+calculation edge cases (no NaN, correct axis orientation).
+
+Files: `src/lib/attempt-history.ts` (new),
+`src/components/shared/RadarChart.tsx` (new),
+`src/app/api/sessions/[id]/end/route.ts`,
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/app/api/sessions/[id]/results/route.ts`,
+`src/app/api/sessions/[id]/leaderboard/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
+## 58. Settings note: made the history-comparison dependency explicit
+
+The "Require mobile/email on join" toggle's description now explicitly
+says it's also what enables a participant's "your progress" radar chart
+on future retakes — this wasn't obvious from the setting's name alone,
+and someone could easily leave it off, then wonder later why the
+progress comparison never shows up for their quiz.
+
+Files: `src/components/admin/QuizEditor.tsx`.
+
+## 59. Participation certificates, AI spell-check, and AI-suggested wrong-answer feedback
+
+**Participation certificates**: setting a quiz's pass mark to 0% now
+does exactly what you described — everyone gets a certificate (with
+"Issue certificate on passing" turned on), and the default wording no
+longer mentions a score at all ("En reconnaissance de sa participation
+au programme..." instead of "...avec un score de X%"). The results
+page's radar chart evaluation (self vs. history/pass-mark) is skipped
+entirely for these quizzes too, since an evaluation doesn't fit a
+participation-only context. A quiz-specific custom achievement message
+you've written yourself still always wins as-is, even if it happens to
+mention {score} — this only changes the *default* wording.
+
+**AI spell-check for questions**: a "Check spelling" button in the
+question editor reviews the question text, all four answers, and the
+explanation together in one pass. Deliberately conservative — brand
+names, model names, and horology terms are explicitly left alone rather
+than "corrected." Shows each flagged issue with a before/after, and you
+apply them individually or all at once — nothing changes automatically.
+
+**AI-suggested wrong-answer feedback**: an "✨ AI suggest" button next to
+each wrong-answer feedback field drafts a short, plain-language
+explanation of why that specific answer is wrong — a real starting
+point to edit, not a final answer imposed on you. Only appears for
+options that aren't the current correct answer, since a "why this wrong
+answer is wrong" suggestion doesn't make sense for the correct one.
+
+Files: `src/lib/ai.ts`, `src/app/api/ai/check-spelling/route.ts` (new),
+`src/app/api/ai/suggest-feedback/route.ts` (new),
+`src/components/admin/QuestionEditor.tsx`,
+`src/app/play/[sessionId]/results/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

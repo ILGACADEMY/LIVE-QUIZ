@@ -232,6 +232,32 @@ create table if not exists certificates (
 alter table certificates enable row level security;
 
 -- ---------------------------------------------------------------------------
+-- Quiz attempt history — deliberately NOT tied to sessions.id with a
+-- cascading delete. Sessions (and everything under them — participants,
+-- answers) are auto-purged 24 hours after they finish; this table exists
+-- specifically so "how did I do last time" survives that cleanup and
+-- still means something weeks or months later, not just same-day
+-- retakes. participant_key is whichever of mobile/email was collected
+-- (normalized the same way the join route does) — matching across
+-- attempts is only possible for quizzes with "Require mobile/email on
+-- join" turned on; a quiz without it simply never writes a row here,
+-- and the results page falls back to comparing against the pass mark
+-- instead of a real previous attempt.
+-- ---------------------------------------------------------------------------
+create table if not exists quiz_attempt_history (
+  id                  uuid primary key default gen_random_uuid(),
+  quiz_id             uuid, -- soft reference, no FK cascade — this row must survive the quiz template itself being deleted
+  quiz_title          text not null,
+  participant_key     text not null, -- normalized mobile, or email if no mobile
+  participant_name    text not null,
+  category_breakdown  jsonb not null,
+  score_percent       int not null,
+  completed_at        timestamptz not null default now()
+);
+create index if not exists idx_attempt_history_lookup on quiz_attempt_history(quiz_id, participant_key, completed_at desc);
+alter table quiz_attempt_history enable row level security;
+
+-- ---------------------------------------------------------------------------
 -- Row Level Security
 -- All writes happen through Next.js API routes using the service_role key,
 -- which bypasses RLS. The anon key (used by the browser) gets read-only,

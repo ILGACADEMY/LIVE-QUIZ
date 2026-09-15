@@ -4,6 +4,7 @@ import { LiveSession, PublicQuestion } from "@/lib/types";
 import { translateQuestion, translateBullets } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
 import { broadcastSessionEvent } from "@/lib/realtime";
+import { recordAttemptHistory } from "@/lib/attempt-history";
 
 function toPublicQuestion(session: LiveSession, index: number): PublicQuestion | null {
   const q = session.quiz_snapshot.questions[index];
@@ -126,6 +127,11 @@ async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
         .update({ completed_at: endedAt.toISOString() })
         .eq("session_id", session.id)
         .is("completed_at", null);
+      // Same persistent history write as the manual /end route — this is
+      // the automatic path (reaching the natural last question), so it
+      // needs the identical call to behave the same way regardless of
+      // how the session actually finished.
+      await recordAttemptHistory(session.id);
       await broadcastSessionEvent(session.id, "quiz_ended", { deleted: false });
       return updated;
     }
@@ -361,7 +367,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
       speedBonusWindowSeconds: quiz.speed_bonus_window_seconds,
       questionTimerSeconds: quiz.question_timer_seconds ?? 20,
       instructionBullets: translatedBullets ?? englishBullets,
-      instructionsTranslated: Boolean(translatedBullets)
+      instructionsTranslated: Boolean(translatedBullets),
+      translationEnabled: quiz.translation_enabled,
+      language: participant.language ?? "en"
     });
   }
 

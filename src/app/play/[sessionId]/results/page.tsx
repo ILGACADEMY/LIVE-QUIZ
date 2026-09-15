@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import ScoreCircle from "@/components/participant/ScoreCircle";
+import RadarChart from "@/components/shared/RadarChart";
 
 interface Breakdown {
   questionIndex: number;
@@ -32,6 +33,7 @@ interface ResultsData {
   breakdown: Breakdown[];
   categoryBreakdown: { category: string; correct: number; total: number }[];
   topicBreakdown: { topic: string; correct: number; total: number }[];
+  previousAttempt: { categoryBreakdown: { category: string; correct: number; total: number }[]; scorePercent: number; completedAt: string } | null;
 }
 
 interface Profile {
@@ -300,12 +302,18 @@ export default function ResultsPage({
     }
 
     // Custom per-quiz achievement wording if the admin set one (with
-    // {name}/{score} placeholders filled in), otherwise the French
-    // default matching the reference design.
-    const achievementText = (
-      message ||
-      `En reconnaissance de la r\u00e9ussite du programme ${orgName} ${orgSubtitle}, avec un score de {score}%.`
-    )
+    // {name}/{score} placeholders filled in) always wins as-is. Otherwise,
+    // the default depends on whether this is a participation certificate
+    // (pass mark set to 0% -- everyone who takes it gets one) or a real
+    // achievement one: a participation certificate's default wording
+    // deliberately never mentions a score, since the whole point of
+    // issuing one to everyone is that the score isn't the qualifying
+    // factor here.
+    const isParticipationCertificate = data.passMarkPercent === 0;
+    const defaultAchievementText = isParticipationCertificate
+      ? `En reconnaissance de sa participation au programme ${orgName} ${orgSubtitle}.`
+      : `En reconnaissance de la r\u00e9ussite du programme ${orgName} ${orgSubtitle}, avec un score de {score}%.`;
+    const achievementText = (message || defaultAchievementText)
       .replace(/\{name\}/gi, certificate.participantName)
       .replace(/\{score\}/gi, String(certificate.scorePercent));
 
@@ -609,6 +617,41 @@ export default function ResultsPage({
               </div>
             )}
             {profile.recommendation && <p className="text-sm text-parchment/60">{profile.recommendation}</p>}
+          </div>
+        )}
+
+        {/* Self vs. own history (if this quiz collects mobile/email and a
+            previous attempt exists) or self vs. the pass mark otherwise —
+            deliberately never self vs. the group here. A peer comparison
+            is motivating for whoever's above average and discouraging for
+            everyone below it; growth against your OWN past attempt, or
+            against a flat target, stays encouraging either way. The
+            group-average comparison still exists — just admin-only, on
+            the presenter dashboard, where no one's being compared in
+            front of anyone else. */}
+        {/* Skipped entirely for a participation quiz (pass mark 0%) — no
+            evaluation, self-vs-history or otherwise, for a quiz that was
+            never about clearing a bar in the first place. */}
+        {data.passMarkPercent > 0 && data.categoryBreakdown && data.categoryBreakdown.length >= 3 && (
+          <div className="case-panel p-6 mb-6 flex flex-col items-center">
+            <p className="field-label mb-1">{data.previousAttempt ? "Your progress" : "Your knowledge shape"}</p>
+            <p className="text-parchment/40 text-xs mb-4 text-center">
+              {data.previousAttempt
+                ? `Compared with your attempt on ${new Date(data.previousAttempt.completedAt).toLocaleDateString()}`
+                : "Compared with the pass mark for this quiz"}
+            </p>
+            <RadarChart
+              categories={data.categoryBreakdown.map((c) => ({ label: c.category, value: Math.round((c.correct / c.total) * 100) }))}
+              comparisonValues={
+                data.previousAttempt
+                  ? data.categoryBreakdown.map((c) => {
+                      const match = data.previousAttempt!.categoryBreakdown.find((p) => p.category === c.category);
+                      return match ? Math.round((match.correct / match.total) * 100) : 0;
+                    })
+                  : data.categoryBreakdown.map(() => data.passMarkPercent)
+              }
+              comparisonLabel={data.previousAttempt ? "Last attempt" : "Pass mark"}
+            />
           </div>
         )}
 

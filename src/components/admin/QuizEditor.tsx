@@ -285,11 +285,19 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                     The mobile number field appears on the join screen and is required (email stays optional) — this
                     is what stops the same person joining twice. Turn this on for a real competition; leave it off
                     for a casual quiz where that friction isn't worth it.
+                    {" "}
+                    <span className="text-gold/70">
+                      It also enables each participant's "your progress" radar chart on their results — comparing
+                      today's attempt against their own last one — since that needs a reliable way to recognize the
+                      same person came back for a retake.
+                    </span>
                   </p>
                 ) : (
                   <p className="text-xs text-parchment/30 -mt-2 mb-4 ml-1">
                     Off by default — mobile/email fields are hidden on the join screen entirely, just Name/Store/City.
-                    Turn this on if you need to stop duplicate entries for a bigger competition.
+                    Turn this on if you need to stop duplicate entries for a bigger competition — it also enables
+                    each participant's "your progress" chart on future retakes, comparing them against their own
+                    last attempt instead of just the pass mark.
                   </p>
                 )}
                 <Toggle

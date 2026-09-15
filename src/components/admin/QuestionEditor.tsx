@@ -74,11 +74,111 @@ export default function QuestionEditor({
   advancedMode?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [spellChecking, setSpellChecking] = useState(false);
+  const [spellCorrections, setSpellCorrections] = useState<
+    { field: "questionText" | "optionA" | "optionB" | "optionC" | "optionD" | "explanation"; original: string; corrected: string }[] | null
+  >(null);
+  const [spellError, setSpellError] = useState<string | null>(null);
+  const [suggestingFeedback, setSuggestingFeedback] = useState<Record<string, boolean>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   function set<K extends keyof EditableQuestion>(key: K, value: EditableQuestion[K]) {
     onChange({ ...question, [key]: value });
+  }
+
+  // Maps the AI route's field names to this question's actual state keys.
+  const FIELD_KEY: Record<string, keyof EditableQuestion> = {
+    questionText: "question_text",
+    optionA: "option_a",
+    optionB: "option_b",
+    optionC: "option_c",
+    optionD: "option_d",
+    explanation: "explanation"
+  };
+  const FIELD_LABEL: Record<string, string> = {
+    questionText: "Question",
+    optionA: "Answer A",
+    optionB: "Answer B",
+    optionC: "Answer C",
+    optionD: "Answer D",
+    explanation: "Explanation"
+  };
+
+  async function checkSpelling() {
+    setSpellChecking(true);
+    setSpellError(null);
+    setSpellCorrections(null);
+    try {
+      const res = await fetch("/api/ai/check-spelling", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionText: question.question_text,
+          optionA: question.option_a,
+          optionB: question.option_b,
+          optionC: question.option_c,
+          optionD: question.option_d,
+          explanation: question.explanation
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setSpellError(data.error ?? "Could not check spelling.");
+        return;
+      }
+      setSpellCorrections(data.corrections ?? []);
+    } catch {
+      setSpellError("Network error — the check never reached the server.");
+    } finally {
+      setSpellChecking(false);
+    }
+  }
+
+  function applyCorrection(index: number) {
+    if (!spellCorrections) return;
+    const correction = spellCorrections[index];
+    set(FIELD_KEY[correction.field], correction.corrected);
+    setSpellCorrections(spellCorrections.filter((_, i) => i !== index));
+  }
+
+  function applyAllCorrections() {
+    if (!spellCorrections) return;
+    let next = { ...question };
+    spellCorrections.forEach((c) => {
+      next = { ...next, [FIELD_KEY[c.field]]: c.corrected };
+    });
+    onChange(next);
+    setSpellCorrections([]);
+  }
+
+  async function suggestFeedbackFor(optionKey: OptionKey, optionField: keyof EditableQuestion, feedbackField: keyof EditableQuestion) {
+    const correctField = OPTIONS.find((o) => o.key === question.correct_option)?.field;
+    const correctText = correctField ? (question[correctField] as string) : "";
+    const wrongOptionText = question[optionField] as string;
+    if (!question.question_text || !correctText || !wrongOptionText) return;
+
+    setSuggestingFeedback((s) => ({ ...s, [optionKey]: true }));
+    try {
+      const res = await fetch("/api/ai/suggest-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          questionText: question.question_text,
+          correctText,
+          wrongOptionText,
+          explanation: question.explanation
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.suggestion) {
+        set(feedbackField, data.suggestion as never);
+      }
+    } catch {
+      // Silent — this is a convenience suggestion, not a required action; leaving the field as-is on failure is fine.
+    } finally {
+      setSuggestingFeedback((s) => ({ ...s, [optionKey]: false }));
+    }
   }
 
   const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -152,7 +252,49 @@ export default function QuestionEditor({
         </div>
       </div>
 
-      <label className="field-label block mb-2">Question</label>
+      <div className="flex items-center justify-between mb-2">
+        <label className="field-label">Question</label>
+        <button
+          type="button"
+          onClick={checkSpelling}
+          disabled={spellChecking}
+          className="text-xs text-parchment/50 hover:text-gold flex items-center gap-1"
+          title="Checks question text, answers, and explanation for genuine spelling errors — brand names and horology terms are left alone"
+        >
+          {spellChecking ? "Checking spelling…" : "✓ Check spelling"}
+        </button>
+      </div>
+      {spellError && <p className="text-crimson text-xs mb-2">{spellError}</p>}
+      {spellCorrections && (
+        <div className="case-panel p-4 mb-4">
+          {spellCorrections.length === 0 ? (
+            <p className="text-parchment/50 text-sm">No spelling issues found.</p>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm text-parchment/70">
+                  {spellCorrections.length} possible issue{spellCorrections.length !== 1 ? "s" : ""} found
+                </p>
+                <button type="button" onClick={applyAllCorrections} className="btn-ghost text-xs px-3 py-1.5">
+                  Apply all
+                </button>
+              </div>
+              <div className="flex flex-col gap-3">
+                {spellCorrections.map((c, i) => (
+                  <div key={i} className="text-sm border-t border-hairline pt-3 first:border-t-0 first:pt-0">
+                    <p className="text-parchment/40 text-xs mb-1">{FIELD_LABEL[c.field]}</p>
+                    <p className="text-crimson/70 line-through mb-0.5">{c.original}</p>
+                    <p className="text-gold mb-2">{c.corrected}</p>
+                    <button type="button" onClick={() => applyCorrection(i)} className="btn-ghost text-xs px-3 py-1">
+                      Apply this one
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <textarea
         value={question.question_text}
         onChange={(e) => set("question_text", e.target.value)}
@@ -251,9 +393,22 @@ export default function QuestionEditor({
           <details className="mb-5">
         <summary className="field-label cursor-pointer mb-3">Wrong-answer feedback (optional, per option)</summary>
         <div className="grid md:grid-cols-2 gap-4 mt-3">
-          {OPTIONS.map(({ key, feedbackField }) => (
+          {OPTIONS.map(({ key, field, feedbackField }) => (
             <div key={key}>
-              <label className="field-label block mb-2">If they picked {key}</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="field-label">If they picked {key}</label>
+                {key !== question.correct_option && (
+                  <button
+                    type="button"
+                    onClick={() => suggestFeedbackFor(key, field, feedbackField)}
+                    disabled={suggestingFeedback[key] || !question.question_text || !question[field]}
+                    className="text-xs text-parchment/40 hover:text-gold disabled:opacity-40"
+                    title="AI drafts a short, easy-to-understand explanation of why this answer is wrong — review and edit before saving"
+                  >
+                    {suggestingFeedback[key] ? "Thinking…" : "✨ AI suggest"}
+                  </button>
+                )}
+              </div>
               <input
                 value={question[feedbackField] as string}
                 onChange={(e) => set(feedbackField, e.target.value as never)}

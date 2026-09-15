@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession } from "@/lib/types";
 import { translateQuestion } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
+import { getPreviousAttempt } from "@/lib/attempt-history";
 
 const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d" } as const;
 
@@ -186,6 +187,14 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     }, {})
   );
 
+  // "How did I do last time" for the results page's self-vs-own-history
+  // radar — a real previous attempt if this quiz collects mobile/email
+  // and one exists; the client falls back to comparing against the pass
+  // mark instead when this comes back null (first attempt, or this quiz
+  // never collects contact info to match on).
+  const participantKey = participant.mobile || participant.email || null;
+  const previousAttempt = await getPreviousAttempt(session.quiz_id, participantKey, participant.completed_at);
+
   // Same shape, grouped by the question's specific learning_topic instead
   // of its broader category — this is what lets the AI profile name a
   // precise thing to revise ("Chronograph tachymeter function") rather
@@ -216,6 +225,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     aiFeedbackEnabled: quiz.ai_feedback_enabled,
     breakdown,
     categoryBreakdown,
-    topicBreakdown
+    topicBreakdown,
+    previousAttempt
   });
 }

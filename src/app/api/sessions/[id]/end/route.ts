@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
+import { recordAttemptHistory } from "@/lib/attempt-history";
 
 // POST /api/sessions/:id/end — "END QUIZ" (spec §23). Session data (spec
 // §35) is retained for 24h from this moment for the admin to review
@@ -54,6 +55,13 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     .update({ completed_at: endedAt.toISOString() })
     .eq("session_id", params.id)
     .is("completed_at", null);
+
+  // Writes the persistent per-person history this quiz's future results
+  // pages compare against — deliberately independent of this session's
+  // own 24h auto-delete, so "how did I do last time" still works weeks
+  // later. Only for participants who have a mobile/email on file; a
+  // quiz without that has nothing reliable to key a future match on.
+  await recordAttemptHistory(params.id);
 
   await broadcastSessionEvent(params.id, "quiz_ended", { deleted: false });
 

@@ -6,10 +6,12 @@ import { QRCodeSVG } from "qrcode.react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
 import ResponseDistributionChart from "@/components/admin/ResponseDistributionChart";
+import RadarChart from "@/components/shared/RadarChart";
 import PresenterTimer from "@/components/admin/PresenterTimer";
 
 interface AdminLeaderboardRow {
   rank: number;
+  participantId: string;
   name: string;
   store: string | null;
   city: string | null;
@@ -81,6 +83,12 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [analysisCategoryBreakdown, setAnalysisCategoryBreakdown] = useState<{ category: string; correct: number; total: number }[]>([]);
   const [analysisTopicBreakdown, setAnalysisTopicBreakdown] = useState<{ topic: string; correct: number; total: number }[]>([]);
+  // Self-vs-group diagnostic radar (item 57) — admin-only, deliberately
+  // never shown to the participant themselves. Picking a name here fetches
+  // that one person's category breakdown to overlay against the group's.
+  const [selectedParticipantId, setSelectedParticipantId] = useState("");
+  const [selectedParticipantCategories, setSelectedParticipantCategories] = useState<{ category: string; correct: number; total: number }[] | null>(null);
+  const [selectedParticipantLoading, setSelectedParticipantLoading] = useState(false);
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
   const poll = useCallback(async () => {
@@ -212,6 +220,21 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
       setAnalysis(data.analysis);
       setAnalysisCategoryBreakdown(data.categoryBreakdown ?? []);
       setAnalysisTopicBreakdown(data.topicBreakdown ?? []);
+    }
+  }
+
+  async function selectParticipantForDiagnostic(participantId: string) {
+    setSelectedParticipantId(participantId);
+    if (!participantId) {
+      setSelectedParticipantCategories(null);
+      return;
+    }
+    setSelectedParticipantLoading(true);
+    const res = await fetch(`/api/sessions/${sessionId}/results?participantId=${participantId}`);
+    setSelectedParticipantLoading(false);
+    if (res.ok) {
+      const data = await res.json();
+      setSelectedParticipantCategories(data.categoryBreakdown ?? []);
     }
   }
 
@@ -502,6 +525,49 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                         })}
                     </div>
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* Self vs. group — admin-only by design. Never shown to a
+                participant: for someone below the average, a visible peer
+                comparison is discouraging rather than motivating, so
+                their own results page instead compares against their own
+                history (or the pass mark). This diagnostic view exists
+                purely for you to spot who needs a specific conversation,
+                without that comparison ever being visible to them. */}
+            {analysisCategoryBreakdown.length > 0 && fullLeaderboard && fullLeaderboard.length > 0 && (
+              <div className="case-panel p-6 mb-6">
+                <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+                  <p className="field-label">Individual vs. group (admin only)</p>
+                  <select
+                    value={selectedParticipantId}
+                    onChange={(e) => selectParticipantForDiagnostic(e.target.value)}
+                    className="field-input text-sm w-auto"
+                  >
+                    <option value="">Choose a participant…</option>
+                    {fullLeaderboard.map((r) => (
+                      <option key={r.participantId} value={r.participantId}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {selectedParticipantLoading && <p className="text-parchment/40 text-sm">Loading…</p>}
+                {!selectedParticipantLoading && selectedParticipantCategories && selectedParticipantCategories.length >= 3 && (
+                  <div className="flex justify-center">
+                    <RadarChart
+                      categories={selectedParticipantCategories.map((c) => ({ label: c.category, value: Math.round((c.correct / c.total) * 100) }))}
+                      comparisonValues={selectedParticipantCategories.map((c) => {
+                        const groupMatch = analysisCategoryBreakdown.find((g) => g.category === c.category);
+                        return groupMatch ? Math.round((groupMatch.correct / groupMatch.total) * 100) : 0;
+                      })}
+                      comparisonLabel="Group average"
+                    />
+                  </div>
+                )}
+                {!selectedParticipantLoading && selectedParticipantId && selectedParticipantCategories && selectedParticipantCategories.length < 3 && (
+                  <p className="text-parchment/40 text-sm">Not enough categories on this quiz for a shape chart.</p>
                 )}
               </div>
             )}

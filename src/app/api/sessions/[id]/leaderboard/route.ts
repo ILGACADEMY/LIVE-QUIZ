@@ -115,6 +115,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({
       leaderboard: ranked.map((r) => ({
         rank: r.rank,
+        participantId: r.id,
         name: r.name,
         avatar: r.avatar,
         store: r.store,

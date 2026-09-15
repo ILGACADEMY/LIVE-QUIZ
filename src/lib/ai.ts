@@ -225,3 +225,98 @@ export async function translateBullets(languageName: string, bullets: string[]):
   const parsed = safeParseJson<string[]>(extractText(msg), bullets);
   return Array.isArray(parsed) && parsed.length === bullets.length ? parsed : bullets;
 }
+
+/**
+ * Checks a question's text fields for genuine spelling/typo errors —
+ * deliberately conservative, since this content is full of brand names
+ * (Cerruti, Longines), model names, and technical horology terms that a
+ * naive spell-checker would flag as "wrong" when they're not. Only
+ * returns fields that actually had a real issue, with the corrected
+ * version — the admin reviews and applies each one, nothing is changed
+ * automatically.
+ */
+export async function checkQuestionSpelling(params: {
+  questionText: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  explanation: string;
+}): Promise<{ field: "questionText" | "optionA" | "optionB" | "optionC" | "optionD" | "explanation"; original: string; corrected: string }[]> {
+  const fields: Array<[string, string]> = [
+    ["questionText", params.questionText],
+    ["optionA", params.optionA],
+    ["optionB", params.optionB],
+    ["optionC", params.optionC],
+    ["optionD", params.optionD],
+    ["explanation", params.explanation]
+  ];
+  const nonEmpty = fields.filter(([, text]) => text && text.trim().length > 0);
+  if (nonEmpty.length === 0) return [];
+
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 800,
+    system:
+      "You proofread short pieces of text from a luxury watch retail training quiz for genuine spelling and typo " +
+      "errors only — not grammar style, not phrasing, not word choice. Be conservative: brand names (e.g. Cerruti, " +
+      "Longines, Palm Angels), watch model names, and technical horology terms (e.g. tourbillon, chronograph, " +
+      "tachymeter) are correct as given even if unusual — never 'fix' those. Return ONLY a valid JSON array, no " +
+      'preamble, no markdown fences, of objects {"field": string, "corrected": string} — ONLY for fields that ' +
+      "actually contain a real spelling/typo error, with the field name exactly as given and the fully corrected " +
+      "text for that field. Return an empty array [] if nothing needs fixing.",
+    messages: [
+      {
+        role: "user",
+        content: JSON.stringify(Object.fromEntries(nonEmpty))
+      }
+    ]
+  });
+
+  const parsed = safeParseJson<{ field: string; corrected: string }[]>(extractText(msg), []);
+  if (!Array.isArray(parsed)) return [];
+
+  const originals = Object.fromEntries(nonEmpty);
+  return parsed
+    .filter((r) => r.field in originals && typeof r.corrected === "string" && r.corrected !== originals[r.field as keyof typeof originals])
+    .map((r) => ({
+      field: r.field as "questionText" | "optionA" | "optionB" | "optionC" | "optionD" | "explanation",
+      original: originals[r.field as keyof typeof originals],
+      corrected: r.corrected
+    }));
+}
+
+/**
+ * Suggests a short, easy-to-understand feedback message for one specific
+ * wrong answer option — shown to a participant who picked it, explaining
+ * why it's wrong in a way that actually helps them understand the
+ * concept, not just "incorrect." The admin reviews and can edit before
+ * saving; this only ever fills in a starting draft.
+ */
+export async function suggestWrongAnswerFeedback(params: {
+  questionText: string;
+  correctText: string;
+  wrongOptionText: string;
+  explanation?: string;
+}): Promise<string> {
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 150,
+    system:
+      "You write a single short, encouraging feedback sentence (max 25 words) shown to a luxury watch retail " +
+      "trainee who picked a WRONG answer on a quiz question. Explain simply why that specific wrong choice is " +
+      "incorrect and briefly point toward the actual concept — plain language, easy to understand quickly on a " +
+      "phone screen, not a lecture. Return ONLY the sentence itself, no preamble, no quotation marks.",
+    messages: [
+      {
+        role: "user",
+        content:
+          `Question: ${params.questionText}\n` +
+          `The wrong answer they picked: ${params.wrongOptionText}\n` +
+          `The correct answer: ${params.correctText}` +
+          (params.explanation ? `\nGeneral explanation: ${params.explanation}` : "")
+      }
+    ]
+  });
+  return extractText(msg).trim().replace(/^"|"$/g, "");
+}

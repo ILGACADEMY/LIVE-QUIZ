@@ -7,6 +7,7 @@ import AnswerGrid from "@/components/participant/AnswerGrid";
 import CountdownDial from "@/components/participant/CountdownDial";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
+import LanguagePicker from "@/components/participant/LanguagePicker";
 
 type Phase = "loading" | "waiting" | "countdown" | "question" | "locked" | "revealed" | "finished" | "ended" | "error";
 
@@ -57,7 +58,10 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
     passMarkPercent: number;
     questionTimerSeconds: number;
     instructionBullets: string[];
+    translationEnabled: boolean;
   } | null>(null);
+  const [currentLanguage, setCurrentLanguage] = useState("en");
+  const [languageSaving, setLanguageSaving] = useState(false);
   const startsAtRef = useRef<number | null>(null);
   const submittingRef = useRef(false);
 
@@ -95,8 +99,10 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         scoringMode: data.scoringMode,
         passMarkPercent: data.passMarkPercent,
         questionTimerSeconds: data.questionTimerSeconds,
-        instructionBullets: data.instructionBullets ?? []
+        instructionBullets: data.instructionBullets ?? [],
+        translationEnabled: Boolean(data.translationEnabled)
       });
+      setCurrentLanguage(data.language ?? "en");
       setPhase((p) => (p === "countdown" ? p : "waiting"));
       return;
     }
@@ -131,6 +137,35 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
       return;
     }
   }, [participantId, params.sessionId]);
+
+  // The one real safety net for "forgot to pick a language before
+  // joining" — lets it be changed right up until the quiz actually
+  // starts, without needing to rejoin. Applies going forward only:
+  // whatever's already shown stays as-is, but the next poll (this
+  // waiting screen's instructions, or the first question once it
+  // starts) picks up the new language.
+  async function changeLanguage(code: string) {
+    if (!participantId || code === currentLanguage) return;
+    const previous = currentLanguage;
+    setLanguageSaving(true);
+    setCurrentLanguage(code); // optimistic — reverted below if the save fails
+    try {
+      const res = await fetch(`/api/sessions/${params.sessionId}/participant-language`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantId, language: code })
+      });
+      if (res.ok) {
+        fetchState(); // pull the waiting screen's instructions in the new language right away
+      } else {
+        setCurrentLanguage(previous);
+      }
+    } catch {
+      setCurrentLanguage(previous);
+    } finally {
+      setLanguageSaving(false);
+    }
+  }
 
   // Skip the "Nice work, tap to view results" middle step entirely — go
   // straight to the results page the moment the quiz finishes. That
@@ -280,6 +315,16 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
         <div className="w-16 h-16 flex items-center justify-center text-3xl border border-hairline mb-4">{avatar}</div>
         <p className="font-display italic text-3xl mb-3">{name || "Welcome"}</p>
         <p className="text-parchment/50 mb-6">Waiting for the instructor to start…</p>
+
+        {waitingInfo?.translationEnabled && (
+          <div className="w-full max-w-xs mb-6 text-left">
+            <label className="field-label block mb-2 text-center">
+              Language {languageSaving && <span className="text-parchment/30">— saving…</span>}
+            </label>
+            <LanguagePicker value={currentLanguage} onChange={changeLanguage} />
+            <p className="text-parchment/30 text-xs mt-1.5 text-center">Forgot to pick one earlier? Change it here any time before the quiz starts.</p>
+          </div>
+        )}
 
         {waitingInfo && waitingInfo.instructionBullets.length > 0 && (
           <div className="case-panel p-6 max-w-xs text-left">
