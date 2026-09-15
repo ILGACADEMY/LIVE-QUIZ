@@ -8,6 +8,8 @@ import MeridianWordmark from "@/components/shared/MeridianWordmark";
 import ResponseDistributionChart from "@/components/admin/ResponseDistributionChart";
 import RadarChart from "@/components/shared/RadarChart";
 import PresenterTimer from "@/components/admin/PresenterTimer";
+import PresentationView from "@/components/admin/PresentationView";
+import { useFullscreen } from "@/lib/useFullscreen";
 
 interface AdminLeaderboardRow {
   rank: number;
@@ -51,30 +53,31 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [state, setState] = useState<StateResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [joinUrl, setJoinUrl] = useState("");
-  const [qrFullscreen, setQrFullscreen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Real browser full-screen for the whole presenter view (not just the
-  // QR overlay) — hides the browser's own address bar/tabs so the
-  // content genuinely fills a 16:9 screen or projector, addressing the
-  // "a lot of empty space around a narrow column" feedback directly
-  // rather than just widening the layout a little.
-  function toggleFullscreen() {
-    if (!document.fullscreenElement) {
-      document.getElementById("presenter-main")?.requestFullscreen();
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullscreen(false);
-    }
-  }
+  // One real fullscreen mechanism, used everywhere on this page — this
+  // replaces two previously inconsistent things: this button (which
+  // already used the real Fullscreen API) and the old "Show QR full
+  // screen" button (which only faked it with a CSS overlay, never
+  // actually hiding the browser's own tabs/address bar — exactly why
+  // that one still showed browser chrome). Esc-to-exit is handled
+  // natively by the browser once real fullscreen is active.
+  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreen("presenter-main");
+
+  // Presentation Mode: real fullscreen PLUS a dedicated, simplified
+  // layout (PresentationView) for whatever's actually live — not just
+  // the admin dashboard scaled up. Automatically falls back to the
+  // normal admin view the moment fullscreen is exited (Esc, browser UI,
+  // whatever), so there's no way to get stuck in a simplified view
+  // without the fullscreen that's meant to go with it.
+  const [presentationMode, setPresentationMode] = useState(false);
   useEffect(() => {
-    function handleChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
-    }
-    document.addEventListener("fullscreenchange", handleChange);
-    return () => document.removeEventListener("fullscreenchange", handleChange);
-  }, []);
+    if (!isFullscreen) setPresentationMode(false);
+  }, [isFullscreen]);
+  function enterPresentationMode() {
+    setPresentationMode(true);
+    enterFullscreen();
+  }
+
   const [fullLeaderboard, setFullLeaderboard] = useState<AdminLeaderboardRow[] | null>(null);
   const [filterOptions, setFilterOptions] = useState<{ stores: string[]; cities: string[] }>({ stores: [], cities: [] });
   const [nameSearch, setNameSearch] = useState("");
@@ -251,8 +254,32 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
       ? "ANSWER REVEALED"
       : "LIVE";
 
+  // Whether Presentation Mode's dedicated layout should show right now —
+  // computed here, but rendered INSIDE the same stable <main id=
+  // "presenter-main"> element below rather than as a separate early
+  // return. That distinction actually matters: requestFullscreen() is
+  // called on a specific DOM node, not just an id string — if React
+  // ever unmounted that node and mounted a different one (even with the
+  // same id), the browser would silently exit fullscreen right as the
+  // presenter clicked the button. Keeping one persistent wrapper and
+  // just swapping what's rendered inside it avoids that entirely.
+  const showPresentationView = presentationMode && state.question && (state.phase === "question" || state.phase === "revealed");
+
   return (
-    <main id="presenter-main" className="min-h-screen px-6 py-8 md:px-16 bg-charcoal flex flex-col justify-center">
+    <main
+      id="presenter-main"
+      className={showPresentationView ? "" : "min-h-screen px-6 py-8 md:px-16 bg-charcoal flex flex-col justify-center"}
+    >
+      {showPresentationView && state.question ? (
+        <PresentationView
+          quizTitle={state.quizTitle}
+          questionNumber={state.questionNumber}
+          totalQuestions={state.totalQuestions}
+          question={state.question}
+          phase={state.phase as "question" | "revealed"}
+          phaseDeadline={state.phaseDeadline}
+        />
+      ) : (
       <div className="max-w-[1400px] w-full mx-auto">
         <button onClick={() => router.push("/admin")} className="text-parchment/50 text-sm mb-4 hover:text-gold">
           ← My Quizzes
@@ -292,8 +319,8 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             <a href={`/leaderboard/${sessionId}`} target="_blank" rel="noreferrer" className="btn-ghost">
               Show leaderboard
             </a>
-            <button onClick={toggleFullscreen} className="btn-ghost">
-              {isFullscreen ? "Exit full screen" : "Full screen"}
+            <button onClick={isFullscreen ? exitFullscreen : enterPresentationMode} className="btn-ghost">
+              {isFullscreen ? "Exit presentation mode" : "Enter presentation mode"}
             </button>
             <button onClick={deleteSession} disabled={busy} className="px-4 py-3 text-crimson/80 hover:text-crimson text-sm">
               Delete session
@@ -317,34 +344,29 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                 </p>
               )}
               <p className="text-parchment/40 text-base mb-5">No app, account, or password needed.</p>
-              <button onClick={() => setQrFullscreen(true)} className="btn-ghost text-base px-5 py-2.5">
-                Show QR full screen
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <button onClick={enterFullscreen} className="btn-ghost text-base px-5 py-2.5">
+                  Show QR full screen
+                </button>
+                {/* Opens in a new tab rather than an embedded iframe —
+                    a real 3D/WebGL scene nested inside this page carries
+                    real risk (older laptops, unusual browsers, one more
+                    thing that could visibly fail in front of a room),
+                    and a plain new tab sidesteps that entirely while
+                    still landing on exactly this session's real join
+                    link. The QR panel here stays as the always-available
+                    fallback regardless of how that tab behaves. */}
+                <a
+                  href={`/watch-qr.html?url=${encodeURIComponent(joinUrl)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-ghost text-base px-5 py-2.5"
+                >
+                  Open 3D watch experience
+                </a>
+              </div>
             </div>
           </section>
-        )}
-
-        {qrFullscreen && (
-          <div className="fixed inset-0 z-50 bg-charcoal flex flex-col items-center justify-center gap-8 p-8">
-            <button
-              onClick={() => setQrFullscreen(false)}
-              className="absolute top-6 right-6 w-12 h-12 flex items-center justify-center border border-hairline text-parchment/60 hover:text-gold hover:border-gold text-2xl leading-none"
-              title="Close"
-              aria-label="Close"
-            >
-              ×
-            </button>
-            <MeridianWordmark />
-            <div className="bg-ivory p-8">
-              <QRCodeSVG value={joinUrl} size={520} bgColor="#F3EDE1" fgColor="#12100D" />
-            </div>
-            {state.shortCode && (
-              <p className="text-2xl text-parchment/70">
-                Or enter code <span className="font-dial text-gold text-4xl tracking-[0.3em]">{state.shortCode}</span> at{" "}
-                {joinUrl.split("/join")[0]}/join
-              </p>
-            )}
-          </div>
         )}
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
@@ -604,6 +626,7 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           </>
         )}
       </div>
+      )}
     </main>
   );
 }

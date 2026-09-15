@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
+import { useFullscreen } from "@/lib/useFullscreen";
 
 interface Row {
   rank: number;
@@ -73,12 +74,17 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
   // reached beyond that would quietly break that privacy boundary. Only
   // relevant to the individual view — the team views have no names to
   // search by design.
+  const { isFullscreen, enter: enterFullscreen, exit: exitFullscreen } = useFullscreen("leaderboard-main");
+
   const visibleTop10 = search.trim()
     ? top10.filter((r) => r.name.toLowerCase().includes(search.trim().toLowerCase()))
     : top10;
 
   return (
-    <main className="min-h-screen px-10 py-14 flex flex-col items-center">
+    <main id="leaderboard-main" className="min-h-screen px-10 py-14 flex flex-col items-center bg-charcoal relative">
+      <button onClick={isFullscreen ? exitFullscreen : enterFullscreen} className="btn-ghost text-xs px-4 py-2 absolute top-6 right-6">
+        {isFullscreen ? "Exit full screen" : "Full screen"}
+      </button>
       <MeridianWordmark size="large" />
       <h1 className="font-display italic text-5xl mt-6 mb-2">Leaderboard</h1>
       {view === "top10" && (
@@ -135,20 +141,28 @@ export default function LeaderboardPage({ params }: { params: { sessionId: strin
           {visibleTop10.map((row) => (
             <div
               key={row.rank}
-              className={`case-panel flex items-center justify-between px-8 py-5 ${row.rank <= 3 ? "border-gold" : ""}`}
+              className={`case-panel flex items-center justify-between transition-all ${
+                row.rank === 1
+                  ? "border-gold border-2 px-10 py-7 shadow-[0_0_30px_rgba(201,162,75,0.15)]"
+                  : row.rank <= 3
+                  ? "border-gold px-8 py-6"
+                  : "px-8 py-6"
+              }`}
             >
               <div className="flex items-center gap-6">
-                <span className="font-dial text-2xl w-12 text-gold">{MEDALS[row.rank - 1] ?? row.rank}</span>
-                {row.avatar && <span className="text-2xl">{row.avatar}</span>}
+                <span className={`font-dial text-gold ${row.rank === 1 ? "text-4xl w-16" : "text-2xl w-12"}`}>
+                  {MEDALS[row.rank - 1] ?? row.rank}
+                </span>
+                {row.avatar && <span className={row.rank === 1 ? "text-3xl" : "text-2xl"}>{row.avatar}</span>}
                 <div>
-                  <p className="font-display italic text-2xl leading-tight">{row.name}</p>
+                  <p className={`font-display italic leading-tight ${row.rank === 1 ? "text-3xl" : "text-2xl"}`}>{row.name}</p>
                   <p className="text-parchment/40 text-xs mt-0.5">
                     {row.correctCount}/{row.totalQuestions} correct
                     {(row.store || row.city) && <> · {[row.store, row.city].filter(Boolean).join(" — ")}</>}
                   </p>
                 </div>
               </div>
-              <span className="font-dial text-3xl text-gold">{row.score}</span>
+              <span className={`font-dial text-gold ${row.rank === 1 ? "text-4xl" : "text-3xl"}`}>{row.score}</span>
             </div>
           ))}
         </div>

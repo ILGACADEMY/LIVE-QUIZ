@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<!--
+  ILG ACADEMY — "THE WATCH THAT BECOMES A QR"
+  ============================================
+  A standalone, dependency-light interactive experience:
+  exploded mechanical watch -> mechanical particles -> real QR code.
+
+  This file is fully self-contained (HTML + CSS + JS, three.js and
+  qrcode-generator loaded from CDN). Deploy as-is on Vercel
+  (e.g. as /public/watch/index.html, or as the body of a Next.js
+  page component) — it needs no build step.
+
+  Destination encoded in the QR: https://ilgquiz.vercel.app/join
+
+  Original procedural watch design — no third-party assets, no
+  copyrighted brand geometry, no code borrowed from tree.icqr.com.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ILG Academy — The Watch That Becomes a QR</title>
+<meta name="description" content="Tap the watch. Watch precision become a QR code. Scan to join the ILG Academy quiz." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,340;9..144,440;9..144,560&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg-0:#07080a;
+    --bg-1:#111318;
+    --steel:#9aa3ae;
+    --steel-dim:#5b616a;
+    --gold:#c7a45c;
+    --gold-soft:#e6cf9a;
+    --blue-steel:#4a7aa8;
+    --ink:#eeeae1;
+    --ink-dim:#83868c;
+    --serif:'Fraunces', ui-serif, Georgia, serif;
+    --sans:'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{
+    margin:0; padding:0; width:100%; height:100%;
+    background:var(--bg-0);
+    color:var(--ink);
+    font-family:var(--sans);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  #stage{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 90% 70% at 50% 38%, var(--bg-1) 0%, var(--bg-0) 68%);
+  }
+
+  #stage canvas{ display:block; width:100%; height:100%; }
+
+  /* vignette for depth + focus */
+  .vignette{
+    position:fixed; inset:0; pointer-events:none;
+    background: radial-gradient(ellipse 75% 65% at 50% 45%, transparent 45%, rgba(3,4,5,0.55) 100%);
+    z-index:5;
+  }
+
+  .grain-line{
+    position:fixed; inset:0; pointer-events:none; z-index:5;
+    background-image: repeating-linear-gradient(180deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+  }
+
+  #ui{
+    position:fixed; inset:0; z-index:10; pointer-events:none;
+  }
+
+  /* ---- brand lockup, top-left ---- */
+  .brand{
+    position:absolute; top:clamp(20px, 4vh, 44px); left:clamp(20px, 4vw, 48px);
+    line-height:1;
+  }
+  .brand .mark{
+    font-family:var(--serif);
+    font-optical-sizing:auto;
+    font-weight:440;
+    font-size:clamp(22px, 3vw, 30px);
+    letter-spacing:0.01em;
+    color:var(--ink);
+  }
+  .brand .mark em{
+    font-style:normal;
+    color:var(--gold-soft);
+  }
+  .brand .div{
+    display:inline-block;
+    width:1px; height:0.72em;
+    background:var(--steel-dim);
+    margin:0 0.55em;
+    vertical-align:-0.05em;
+  }
+  .brand .academy{
+    font-family:var(--sans);
+    font-weight:500;
+    font-size:clamp(10px, 1.1vw, 12px);
+    letter-spacing:0.32em;
+    color:var(--ink-dim);
+  }
+
+  /* ---- bottom state text ---- */
+  .caption{
+    position:absolute; left:50%; bottom:clamp(28px, 6vh, 56px);
+    transform:translateX(-50%);
+    text-align:center;
+    width:min(90vw, 480px);
+  }
+  .caption .state-text{
+    font-family:var(--sans);
+    font-weight:500;
+    font-size:clamp(12px, 1.6vw, 14px);
+    letter-spacing:0.24em;
+    color:var(--ink);
+    opacity:0;
+    transform:translateY(6px);
+    transition:opacity 0.6s ease, transform 0.6s ease;
+  }
+  .caption .state-text.show{ opacity:1; transform:translateY(0); }
+  .caption .sub-text{
+    margin-top:8px;
+    font-family:var(--serif);
+    font-weight:340;
+    font-size:clamp(13px, 1.9vw, 16px);
+    color:var(--ink-dim);
+    opacity:0;
+    transition:opacity 0.6s ease;
+  }
+  .caption .sub-text.show{ opacity:1; }
+
+  .tap-dot{
+    display:inline-block;
+    width:6px; height:6px; border-radius:50%;
+    background:var(--gold-soft);
+    margin-right:10px;
+    vertical-align:middle;
+    animation:pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse{
+    0%,100%{ opacity:0.35; transform:scale(1); }
+    50%{ opacity:1; transform:scale(1.5); }
+  }
+
+  /* ---- component labels ---- */
+  #labels{
+    position:absolute; inset:0;
+    opacity:0; transition:opacity 0.8s ease;
+  }
+  #labels.show{ opacity:1; }
+  .label{
+    position:absolute; top:0; left:0;
+    transform:translate(-50%,-50%);
+    font-family:var(--sans);
+    font-size:10px;
+    font-weight:500;
+    letter-spacing:0.22em;
+    color:var(--ink-dim);
+    white-space:nowrap;
+    pointer-events:none;
+  }
+  .label::before{
+    content:'';
+    position:absolute; left:50%; top:130%;
+    width:1px; height:10px;
+    background:var(--steel-dim);
+    transform:translateX(-50%);
+    opacity:0.6;
+  }
+
+  /* ---- tap target (a11y + interaction) ---- */
+  #tapTarget{
+    position:fixed; inset:0; z-index:8;
+    background:transparent; border:0; margin:0; padding:0;
+    cursor:default;
+    pointer-events:none;
+  }
+  #tapTarget.active{ cursor:pointer; pointer-events:auto; }
+  #tapTarget:focus-visible{
+    outline:2px solid var(--gold-soft);
+    outline-offset:-6px;
+  }
+
+  /* ---- QR reveal ---- */
+  #qrWrap{
+    position:absolute; left:50%; top:50%;
+    transform:translate(-50%,-50%);
+    opacity:0;
+    transition:opacity 0.9s ease;
+    z-index:6;
+    text-align:center;
+    pointer-events:none;
+  }
+  #qrWrap.show{ opacity:1; }
+  #qrCanvas{
+    display:block;
+    width:min(48vw, 260px);
+    height:min(48vw, 260px);
+    background:#fff;
+    box-shadow:0 30px 80px -20px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+    border-radius:2px;
+  }
+  #qrUrlText{
+    margin-top:16px;
+    font-family:var(--sans);
+    font-size:11px;
+    letter-spacing:0.08em;
+    color:var(--ink-dim);
+  }
+
+  .sr-only{
+    position:absolute; width:1px; height:1px;
+    padding:0; margin:-1px; overflow:hidden;
+    clip:rect(0,0,0,0); white-space:nowrap; border:0;
+  }
+
+  @media (max-width: 560px){
+    .brand{ top:20px; left:20px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+<div class="vignette"></div>
+<div class="grain-line"></div>
+
+<div id="ui">
+  <div class="brand">
+    <span class="mark">ILG <em>|</em> ACADEMY</span><br/>
+    <span class="academy">DISCOVER&nbsp;THE&nbsp;MECHANICS</span>
+  </div>
+
+  <div id="labels"></div>
+
+  <div id="qrWrap">
+    <canvas id="qrCanvas" width="600" height="600" role="img" aria-label="QR code linking to the ILG Academy quiz"></canvas>
+    <div id="qrUrlText">ilgquiz.vercel.app/join</div>
+  </div>
+
+  <div class="caption">
+    <div class="state-text" id="stateText" aria-live="polite">TAP THE WATCH</div>
+    <div class="sub-text" id="subText"></div>
+  </div>
+</div>
+
+<button id="tapTarget" aria-label="Tap the watch to reveal the QR code"></button>
+
+<div class="sr-only" id="srAnnounce" aria-live="polite"></div>
+
+<!-- three.js r128 (global THREE build) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<!-- kazuhikoarase/qrcode-generator — exposes the raw module matrix,
+     which is what lets us drive both the particle-grid illusion and
+     the real, scan-reliable QR from the same encoded data. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const DESTINATION_URL = new URLSearchParams(location.search).get("url") || "https://ilgquiz.vercel.app/join";
+const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+const COLORS = {
+  bg: 0x07080a,
+  steel: 0x9aa3ae,
+  steelDark: 0x3d4148,
+  gold: 0xc7a45c,
+  goldSoft: 0xe6cf9a,
+  blueSteel: 0x3f6b95,
+  dial: 0x0c1016,
+  crystal: 0xcfd6dc,
+  gasket: 0x121214,
+  accentRed: 0x8a2f2f
+};
+
+/* ============================================================
+   QR MATRIX — generated once from the real destination URL
+   ============================================================ */
+const qr = qrcode(0, "H"); // typeNumber 0 = auto-select smallest that fits
+qr.addData(DESTINATION_URL);
+qr.make();
+const QR_N = qr.getModuleCount();
+const darkCells = [];
+for (let row = 0; row < QR_N; row++) {
+  for (let col = 0; col < QR_N; col++) {
+    if (qr.isDark(row, col)) darkCells.push({ row, col });
+  }
+}
+// gentle shuffle so the convergence animation doesn't read left-to-right
+for (let i = darkCells.length - 1; i > 0; i--) {
+  const j = Math.floor(Math.random() * (i + 1));
+  [darkCells[i], darkCells[j]] = [darkCells[j], darkCells[i]];
+}
+
+/* ============================================================
+   DOM
+   ============================================================ */
+const stage = document.getElementById("stage");
+const tapTarget = document.getElementById("tapTarget");
+const stateText = document.getElementById("stateText");
+const subText = document.getElementById("subText");
+const labelsRoot = document.getElementById("labels");
+const qrWrap = document.getElementById("qrWrap");
+const qrCanvas = document.getElementById("qrCanvas");
+const srAnnounce = document.getElementById("srAnnounce");
+
+/* ============================================================
+   RENDERER / SCENE / CAMERA / LIGHTS
+   ============================================================ */
+function hasWebGL() {
+  try {
+    const c = document.createElement("canvas");
+    return !!(window.WebGLRenderingContext && (c.getContext("webgl") || c.getContext("experimental-webgl")));
+  } catch (e) {
+    return false;
+  }
+}
+if (!hasWebGL()) {
+  // No animated experience without WebGL -- show the real, scannable QR
+  // immediately instead of a blank/broken screen. This is deliberately
+  // the safe fallback: a live training room can't afford a failed
+  // render with no way for anyone to actually join.
+  document.getElementById("tapTarget").style.display = "none";
+  document.getElementById("stateText").textContent = "SCAN TO JOIN";
+  document.getElementById("subText").textContent = "ILG Academy";
+  qrWrap.classList.add("show");
+  drawRealQR();
+  throw new Error("WebGL unavailable -- fell back to static QR display.");
+}
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(COLORS.bg, 0.055);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 100);
+const CAM_ASSEMBLED = new THREE.Vector3(0.0, 1.35, 5.4);
+const CAM_EXPLODED = new THREE.Vector3(1.0, 1.65, 6.2);
+const CAM_FLAT = new THREE.Vector3(0.0, 0.0, 5.2);
+camera.position.copy(CAM_ASSEMBLED);
+camera.lookAt(0, 0, 0);
+
+const keyLight = new THREE.DirectionalLight(0xfff2da, 2.4);
+keyLight.position.set(3.2, 4.5, 4.0);
+scene.add(keyLight);
+
+const rimLight = new THREE.DirectionalLight(0xaecbe8, 1.5);
+rimLight.position.set(-3.5, 2.0, -3.0);
+scene.add(rimLight);
+
+const fillLight = new THREE.PointLight(0xc7a45c, 0.6, 12, 2);
+fillLight.position.set(-1.5, -1.5, 3.0);
+scene.add(fillLight);
+
+const ambient = new THREE.AmbientLight(0x1c2028, 1.4);
+scene.add(ambient);
+
+/* ============================================================
+   TEXTURE HELPERS (procedural — no external images)
+   ============================================================ */
+function makeDialTexture() {
+  const size = 512;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 10, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, "#161c24");
+  grad.addColorStop(0.55, "#0c1016");
+  grad.addColorStop(1, "#05070a");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  // fine sunburst brushing
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+  ctx.globalAlpha = 0.10;
+  for (let i = 0; i < 240; i++) {
+    ctx.rotate((Math.PI * 2) / 240);
+    ctx.strokeStyle = i % 2 === 0 ? "#3a4552" : "#0a0d11";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(18, 0);
+    ctx.lineTo(size / 2, 0);
+    ctx.stroke();
+  }
+  ctx.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+function makeGenevaStripeTexture() {
+  const size = 256;
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  const ctx = c.getContext("2d");
+  ctx.fillStyle = "#8a6a34";
+  ctx.fillRect(0, 0, size, size);
+  const stripeW = 9;
+  for (let x = -size; x < size * 2; x += stripeW * 2) {
+    const g = ctx.createLinearGradient(x, 0, x + stripeW, 0);
+    g.addColorStop(0, "#efceA0");
+    g.addColorStop(0.5, "#a9803f");
+    g.addColorStop(1, "#5f461f");
+    ctx.fillStyle = g;
+    ctx.fillRect(x, 0, stripeW, size);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.encoding = THREE.sRGBEncoding;
+  return tex;
+}
+
+const dialTexture = makeDialTexture();
+const genevaTexture = makeGenevaStripeTexture();
+
+/* ============================================================
+   MATERIALS
+   ============================================================ */
+const mat = {
+  steel: new THREE.MeshStandardMaterial({ color: COLORS.steel, metalness: 0.92, roughness: 0.28 }),
+  steelDark: new THREE.MeshStandardMaterial({ color: COLORS.steelDark, metalness: 0.85, roughness: 0.4 }),
+  gold: new THREE.MeshStandardMaterial({ color: COLORS.gold, metalness: 0.9, roughness: 0.32 }),
+  goldPlate: new THREE.MeshStandardMaterial({ map: genevaTexture, metalness: 0.85, roughness: 0.3 }),
+  dial: new THREE.MeshStandardMaterial({ map: dialTexture, metalness: 0.3, roughness: 0.5 }),
+  crystal: new THREE.MeshPhysicalMaterial({
+    color: COLORS.crystal, metalness: 0, roughness: 0.04, transmission: 0.92,
+    transparent: true, opacity: 0.35
+  }),
+  hand: new THREE.MeshStandardMaterial({ color: COLORS.blueSteel, metalness: 0.75, roughness: 0.25, emissive: 0x0e2233, emissiveIntensity: 0.35 }),
+  handTip: new THREE.MeshStandardMaterial({ color: COLORS.accentRed, metalness: 0.3, roughness: 0.4 }),
+  gasket: new THREE.MeshStandardMaterial({ color: COLORS.gasket, metalness: 0.1, roughness: 0.8 }),
+  cream: new THREE.MeshStandardMaterial({ color: 0xe9e2d0, metalness: 0.1, roughness: 0.6 })
+};
+
+/* ============================================================
+   PART REGISTRY
+   Every named component gets: mesh/group, an assembled local
+   position, an exploded local position, and (for a curated
+   subset) a floating label.
+   ============================================================ */
+const watch = new THREE.Group();
+scene.add(watch);
+
+const parts = []; // { obj, assembled: Vector3, exploded: Vector3, spin?:fn }
+const labeledParts = []; // { obj, text }
+
+function addPart(obj, assembledPos, explodedOffset, opts = {}) {
+  obj.position.copy(assembledPos);
+  watch.add(obj);
+  parts.push({
+    obj,
+    assembled: assembledPos.clone(),
+    exploded: assembledPos.clone().add(explodedOffset)
+  });
+  if (opts.label) labeledParts.push({ obj, text: opts.label });
+  return obj;
+}
+
+function gear(radius, thickness, teeth, material, toothLen = 0.045) {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, thickness, 28), material);
+  g.add(core);
+  const toothGeo = new THREE.BoxGeometry(0.03, thickness * 0.9, toothLen);
+  for (let i = 0; i < teeth; i++) {
+    const t = new THREE.Mesh(toothGeo, material);
+    const a = (i / teeth) * Math.PI * 2;
+    t.position.set(Math.cos(a) * (radius + toothLen / 2), 0, Math.sin(a) * (radius + toothLen / 2));
+    t.rotation.y = -a;
+    g.add(t);
+  }
+  return g;
+}
+
+/* ---- CASE MIDDLE ---- */
+addPart(
+  new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.02, 0.42, 48), mat.steel),
+  new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -1.7, 0),
+  { label: "CASE" }
+);
+
+/* ---- BEZEL ---- */
+addPart(
+  new THREE.Mesh(new THREE.TorusGeometry(1.02, 0.06, 20, 48), mat.steelDark),
+  new THREE.Vector3(0, 0.24, 0), new THREE.Vector3(0, 0.55, 0)
+).rotation.x = Math.PI / 2;
+
+/* ---- CRYSTAL ---- */
+addPart(
+  new THREE.Mesh(new THREE.SphereGeometry(0.97, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.26), mat.crystal),
+  new THREE.Vector3(0, 0.24, 0), new THREE.Vector3(0, 1.7, 0),
+  { label: "CRYSTAL" }
+);
+
+/* ---- DIAL ---- */
+addPart(
+  new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.04, 48), mat.dial),
+  new THREE.Vector3(0, 0.14, 0), new THREE.Vector3(0, 0.95, 0),
+  { label: "DIAL" }
+);
+
+/* ---- HOUR MARKERS (12x) ---- */
+{
+  const markerGeo = new THREE.BoxGeometry(0.045, 0.02, 0.16);
+  const group = new THREE.Group();
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const m = new THREE.Mesh(markerGeo, mat.gold);
+    m.position.set(Math.sin(a) * 0.74, 0, Math.cos(a) * 0.74);
+    m.rotation.y = a;
+    group.add(m);
+  }
+  addPart(group, new THREE.Vector3(0, 0.17, 0), new THREE.Vector3(0, 1.05, 0));
+}
+
+/* ---- HANDS ---- */
+addPart(
+  new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.46), mat.hand),
+  new THREE.Vector3(0, 0.2, 0), new THREE.Vector3(0, 1.2, 0.15),
+  { label: undefined }
+).rotation.y = 0.5;
+
+addPart(
+  new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.02, 0.66), mat.hand),
+  new THREE.Vector3(0, 0.22, 0), new THREE.Vector3(0, 1.35, -0.15)
+).rotation.y = 2.1;
+
+{
+  const secGroup = new THREE.Group();
+  secGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.02, 0.72), mat.handTip));
+  addPart(secGroup, new THREE.Vector3(0, 0.24, 0), new THREE.Vector3(0, 1.5, 0.3)).rotation.y = 4.0;
+}
+
+/* ---- DATE WHEEL ---- */
+addPart(
+  new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.02, 0.1), mat.cream),
+  new THREE.Vector3(0.62, 0.17, 0), new THREE.Vector3(1.3, 0.4, 0)
+);
+
+/* ---- MOVEMENT PLATE ---- */
+addPart(
+  new THREE.Mesh(new THREE.CylinderGeometry(0.86, 0.86, 0.05, 48), mat.goldPlate),
+  new THREE.Vector3(0, -0.05, 0), new THREE.Vector3(0, -0.55, 0),
+  { label: "MOVEMENT" }
+);
+
+/* ---- BRIDGES (3x) ---- */
+{
+  const bridgeGeo = new THREE.BoxGeometry(0.16, 0.035, 0.62);
+  const positions = [
+    { x: -0.22, z: 0.05, r: 0.35 },
+    { x: 0.18, z: -0.2, r: -0.5 },
+    { x: 0.0, z: 0.3, r: 1.1 }
+  ];
+  positions.forEach((p, i) => {
+    const b = new THREE.Mesh(bridgeGeo, mat.goldPlate);
+    b.rotation.y = p.r;
+    b.position.set(p.x, 0, p.z);
+    addPart(b, new THREE.Vector3(0, -0.1, 0), new THREE.Vector3(0.3 * (i - 1), -0.75, 0.3 * (i - 1)));
+  });
+}
+
+/* ---- BALANCE WHEEL ---- */
+{
+  const balGroup = new THREE.Group();
+  balGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.02, 12, 32), mat.steel));
+  const spoke1 = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.015, 0.03), mat.steel);
+  const spoke2 = spoke1.clone(); spoke2.rotation.y = Math.PI / 2;
+  balGroup.add(spoke1, spoke2);
+  balGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.08, 12), mat.steelDark));
+  balGroup.userData.oscillate = true;
+  addPart(balGroup, new THREE.Vector3(0.45, -0.12, -0.4), new THREE.Vector3(0.9, -1.0, -0.9), { label: "BALANCE" });
+}
+
+/* ---- ESCAPEMENT + GEAR TRAIN ---- */
+{
+  const esc = gear(0.1, 0.035, 12, mat.steel, 0.03);
+  addPart(esc, new THREE.Vector3(0.2, -0.12, -0.15), new THREE.Vector3(0.45, -0.95, -0.35));
+
+  const g1 = gear(0.14, 0.04, 14, mat.steel, 0.035);
+  addPart(g1, new THREE.Vector3(-0.05, -0.12, -0.3), new THREE.Vector3(-0.2, -0.9, -0.6));
+
+  const g2 = gear(0.09, 0.035, 10, mat.steel, 0.028);
+  addPart(g2, new THREE.Vector3(-0.35, -0.12, -0.05), new THREE.Vector3(-0.7, -0.85, -0.15));
+}
+
+/* ---- MAINSPRING BARREL ---- */
+addPart(
+  new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.09, 32), mat.gold),
+  new THREE.Vector3(0.35, -0.12, 0.35), new THREE.Vector3(0.7, -0.85, 0.75)
+);
+
+/* ---- ROTOR ---- */
+{
+  const rotorGeo = new THREE.CircleGeometry(0.72, 40, Math.PI * 0.1, Math.PI * 1.2);
+  const rotorMesh = new THREE.Mesh(rotorGeo, new THREE.MeshStandardMaterial({ color: COLORS.gold, metalness: 0.85, roughness: 0.3, side: THREE.DoubleSide }));
+  rotorMesh.rotation.x = -Math.PI / 2;
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.06, 16), mat.steelDark);
+  const rotorGroup = new THREE.Group();
+  rotorGroup.add(rotorMesh, hub);
+  addPart(rotorGroup, new THREE.Vector3(0, -0.22, 0), new THREE.Vector3(0, -1.25, 0), { label: "ROTOR" });
+}
+
+/* ---- CROWN ---- */
+{
+  const crownGroup = new THREE.Group();
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.22, 16), mat.steel);
+  stem.rotation.z = Math.PI / 2;
+  const head = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.14, 20), mat.steel);
+  head.rotation.z = Math.PI / 2;
+  head.position.x = 0.16;
+  crownGroup.add(stem, head);
+  addPart(crownGroup, new THREE.Vector3(1.1, 0, 0), new THREE.Vector3(2.0, 0.1, 0), { label: "CROWN" });
+}
+
+/* ---- PUSHERS (2x) ---- */
+[0.22, -0.22].forEach((z) => {
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.14, 16), mat.steel);
+  p.rotation.z = Math.PI / 2;
+  addPart(p, new THREE.Vector3(1.05, 0, z), new THREE.Vector3(1.9, 0.35 * Math.sign(z), z * 1.6));
+});
+
+/* ---- LUGS (4x) ---- */
+[[0.55, 0.78], [-0.55, 0.78], [0.55, -0.78], [-0.55, -0.78]].forEach(([x, z]) => {
+  const l = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.26), mat.steel);
+  l.position.set(x, -0.02, z);
+  addPart(l, new THREE.Vector3(0, 0, 0), new THREE.Vector3(x * 0.6, -0.3 * Math.sign(z), z * 0.6));
+});
+
+/* ---- CASEBACK ---- */
+{
+  const cbGroup = new THREE.Group();
+  cbGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.06, 48), mat.steelDark));
+  cbGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.7, 0.006, 8, 48), mat.gold));
+  cbGroup.add(new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.005, 8, 48), mat.gold));
+  addPart(cbGroup, new THREE.Vector3(0, -0.24, 0), new THREE.Vector3(0, -2.1, 0), { label: "CASEBACK" });
+}
+
+/* ---- GASKETS (2x) ---- */
+addPart(
+  new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.015, 8, 48), mat.gasket),
+  new THREE.Vector3(0, 0.2, 0), new THREE.Vector3(0, 1.35, 0)
+);
+addPart(
+  new THREE.Mesh(new THREE.TorusGeometry(0.98, 0.015, 8, 48), mat.gasket),
+  new THREE.Vector3(0, -0.21, 0), new THREE.Vector3(0, -1.9, 0)
+);
+
+/* ---- BRACELET (two curved chains, top + bottom) ---- */
+function buildBracelet(startZ, dir) {
+  const chain = new THREE.Group();
+  const linkGeo = new THREE.BoxGeometry(0.5, 0.1, 0.13);
+  let z = startZ;
+  let tilt = 0;
+  for (let i = 0; i < 6; i++) {
+    const link = new THREE.Mesh(linkGeo, i % 2 === 0 ? mat.steel : mat.steelDark);
+    tilt += dir * 0.16;
+    z += dir * 0.15 - Math.abs(tilt) * 0.02;
+    link.position.set(0, -Math.abs(tilt) * 0.9, z);
+    link.rotation.x = tilt;
+    chain.add(link);
+  }
+  return chain;
+}
+addPart(buildBracelet(0.9, 1), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -0.4, 1.4), { label: "BRACELET" });
+addPart(buildBracelet(-0.9, -1), new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, -0.4, -1.4));
+
+/* ============================================================
+   LABEL DOM ELEMENTS
+   ============================================================ */
+const labelEls = labeledParts.map(({ text }) => {
+  const el = document.createElement("div");
+  el.className = "label";
+  el.textContent = text;
+  labelsRoot.appendChild(el);
+  return el;
+});
+
+function updateLabels() {
+  const v = new THREE.Vector3();
+  labeledParts.forEach(({ obj }, i) => {
+    obj.getWorldPosition(v);
+    v.project(camera);
+    const x = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    const el = labelEls[i];
+    el.style.transform = `translate(${x}px, ${y}px) translate(-50%,-50%)`;
+    el.style.opacity = v.z > 1 ? "0" : "1";
+  });
+}
+
+/* ============================================================
+   PARTICLE SYSTEM — the watch dissolving into QR modules
+   ============================================================ */
+const PARTICLE_COUNT = Math.min(darkCells.length, 760);
+const particleGeo = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+const particleMat = new THREE.MeshStandardMaterial({ metalness: 0.75, roughness: 0.32 });
+const particles = new THREE.InstancedMesh(particleGeo, particleMat, PARTICLE_COUNT);
+particles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+particles.visible = false;
+scene.add(particles);
+
+const dummy = new THREE.Object3D();
+const particleData = []; // { origin: Vector3, target: Vector3, color }
+const paletteColors = [new THREE.Color(COLORS.steel), new THREE.Color(COLORS.gold), new THREE.Color(COLORS.blueSteel)];
+
+// module grid sized to comfortably fill the flat framing
+const CELL_SIZE = 3.2 / QR_N;
+function moduleWorldPos(row, col) {
+  return new THREE.Vector3(
+    (col - QR_N / 2 + 0.5) * CELL_SIZE,
+    -(row - QR_N / 2 + 0.5) * CELL_SIZE,
+    0
+  );
+}
+
+function seedParticles() {
+  const sourceParts = parts.map((p) => p.obj);
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    const src = sourceParts[Math.floor(Math.random() * sourceParts.length)];
+    const origin = new THREE.Vector3();
+    src.getWorldPosition(origin);
+    origin.add(new THREE.Vector3((Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5));
+    const cell = darkCells[i];
+    const target = moduleWorldPos(cell.row, cell.col);
+    const color = paletteColors[Math.floor(Math.random() * paletteColors.length)];
+    particleData.push({ origin, target, color });
+    particles.setColorAt(i, color);
+  }
+  particles.instanceColor.needsUpdate = true;
+}
+seedParticles();
+
+/* ============================================================
+   QR CANVAS (final, scan-reliable render)
+   ============================================================ */
+function drawRealQR() {
+  const QUIET = 4;
+  const cellPx = Math.floor(600 / (QR_N + QUIET * 2));
+  const total = cellPx * (QR_N + QUIET * 2);
+  qrCanvas.width = total;
+  qrCanvas.height = total;
+  const ctx = qrCanvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, total, total);
+  ctx.fillStyle = "#0a0a0a";
+  for (let row = 0; row < QR_N; row++) {
+    for (let col = 0; col < QR_N; col++) {
+      if (qr.isDark(row, col)) {
+        ctx.fillRect((col + QUIET) * cellPx, (row + QUIET) * cellPx, cellPx, cellPx);
+      }
+    }
+  }
+}
+drawRealQR();
+
+/* ============================================================
+   STATE MACHINE
+   ============================================================ */
+const State = {
+  LOAD: "load",
+  ASSEMBLED: "assembled",
+  EXPLODING: "exploding",
+  EXPLODED: "exploded",
+  TRANSFORMING: "transforming",
+  QR: "qr"
+};
+let state = State.LOAD;
+let stateStart = performance.now();
+
+function setState(s) {
+  state = s;
+  stateStart = performance.now();
+}
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOutCubic(t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+function clamp01(t) { return Math.max(0, Math.min(1, t)); }
+
+const D = REDUCED_MOTION
+  ? { assembledHold: 200, explode: 200, transformFade: 150, transformMove: 200, qrFade: 150 }
+  : { assembledHold: 2400, explode: 1500, transformFade: 1100, transformMove: 2300, qrFade: 800 };
+
+function setCaption(main, sub, tapActive) {
+  stateText.textContent = main;
+  stateText.classList.add("show");
+  if (sub) {
+    subText.textContent = sub;
+    subText.classList.add("show");
+  } else {
+    subText.classList.remove("show");
+  }
+  srAnnounce.textContent = main;
+  tapTarget.classList.toggle("active", !!tapActive);
+  tapTarget.setAttribute("aria-label", tapActive ? "Tap the watch to reveal the QR code" : "");
+}
+
+setCaption("", "");
+
+/* ---- interaction ---- */
+function onActivate() {
+  if (state === State.EXPLODED || state === State.ASSEMBLED) {
+    labelsRoot.classList.remove("show");
+    setState(State.TRANSFORMING);
+  } else if (state === State.QR) {
+    // replay
+    qrWrap.classList.remove("show");
+    setState(State.ASSEMBLED);
+  }
+}
+tapTarget.addEventListener("click", onActivate);
+tapTarget.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onActivate(); }
+});
+
+/* ============================================================
+   MAIN LOOP
+   ============================================================ */
+let lastTime = performance.now();
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((now - lastTime) / 1000, 0.05);
+  lastTime = now;
+  const elapsed = now - stateStart;
+
+  // idle watch rotation while whole/exploded
+  if (state === State.ASSEMBLED || state === State.EXPLODED || state === State.LOAD) {
+    watch.rotation.y += dt * 0.16;
+  }
+
+  // balance wheel oscillation (always, subtle life in the movement)
+  parts.forEach((p) => {
+    if (p.obj.userData.oscillate) {
+      p.obj.rotation.z = Math.sin(now * 0.006) * 0.9;
+    }
+  });
+
+  switch (state) {
+    case State.LOAD: {
+      camera.position.copy(CAM_ASSEMBLED);
+      camera.lookAt(0, 0, 0);
+      if (elapsed > 300) setState(State.ASSEMBLED);
+      break;
+    }
+
+    case State.ASSEMBLED: {
+      parts.forEach((p) => {
+        p.obj.position.copy(p.assembled);
+        p.obj.scale.setScalar(1);
+      });
+      camera.position.lerp(CAM_ASSEMBLED, 0.06);
+      camera.lookAt(0, 0.05, 0);
+      setCaption("TAP THE WATCH", "A precision instrument, opened for study.", true);
+      if (elapsed > D.assembledHold) setState(State.EXPLODING);
+      break;
+    }
+
+    case State.EXPLODING: {
+      const t = clamp01(elapsed / D.explode);
+      parts.forEach((p, i) => {
+        const stagger = clamp01((elapsed - i * 12) / D.explode);
+        const e = easeOutCubic(stagger);
+        p.obj.position.lerpVectors(p.assembled, p.exploded, e);
+      });
+      camera.position.lerp(CAM_EXPLODED, 0.04);
+      camera.lookAt(0, -0.1, 0);
+      setCaption("TAP THE WATCH", "A precision instrument, opened for study.", false);
+      if (t >= 1) {
+        setState(State.EXPLODED);
+        labelsRoot.classList.add("show");
+        // Reliability net: reveal the QR automatically after 6s of no
+        // interaction, so it's never gated on someone physically
+        // tapping the presenter's screen.
+        clearTimeout(window.__autoRevealTimer);
+        window.__autoRevealTimer = setTimeout(() => {
+          if (state === State.EXPLODED) onActivate();
+        }, 6000);
+      }
+      break;
+    }
+
+    case State.EXPLODED: {
+      parts.forEach((p) => p.obj.position.copy(p.exploded));
+      camera.position.lerp(CAM_EXPLODED, 0.03);
+      camera.lookAt(0, -0.1, 0);
+      updateLabels();
+      setCaption("TAP THE WATCH", "Every part, in its place.", true);
+      break;
+    }
+
+    case State.TRANSFORMING: {
+      const t = clamp01(elapsed / (D.transformFade + D.transformMove));
+      const fadeT = clamp01(elapsed / D.transformFade);
+      const moveT = clamp01((elapsed - D.transformFade) / D.transformMove);
+
+      // crossfade: watch meshes shrink away, particles grow in
+      const shrink = 1 - easeInOutCubic(fadeT);
+      parts.forEach((p) => p.obj.scale.setScalar(Math.max(shrink, 0.0001)));
+
+      if (fadeT > 0 && !particles.visible) particles.visible = true;
+      const growE = easeOutCubic(fadeT);
+
+      // camera flattens out
+      camera.position.lerp(CAM_FLAT, 0.035);
+      camera.lookAt(0, 0, 0);
+
+      const moveE = easeInOutCubic(moveT);
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const d = particleData[i];
+        const pos = new THREE.Vector3().lerpVectors(d.origin, d.target, moveT > 0 ? moveE : 0);
+        dummy.position.copy(pos);
+        dummy.scale.setScalar(0.04 + growE * 0.05 + moveE * 0.02);
+        dummy.rotation.set(0, 0, 0);
+        dummy.updateMatrix();
+        particles.setMatrixAt(i, dummy.matrix);
+      }
+      particles.instanceMatrix.needsUpdate = true;
+
+      setCaption("BECOMING A CODE", "Precision has a pattern.", false);
+      labelsRoot.classList.remove("show");
+
+      if (elapsed > D.transformFade + D.transformMove + 250) {
+        setState(State.QR);
+      }
+      break;
+    }
+
+    case State.QR: {
+      particles.visible = false;
+      qrWrap.classList.add("show");
+      setCaption("SCAN TO JOIN THE QUIZ", "ILG Academy", true);
+      break;
+    }
+  }
+
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(animate);
+
+/* ============================================================
+   RESIZE
+   ============================================================ */
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+window.addEventListener("resize", onResize);
+</script>
+</body>
+</html>

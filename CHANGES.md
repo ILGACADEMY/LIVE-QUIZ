@@ -1489,6 +1489,97 @@ Files: `src/lib/ai.ts`, `src/app/api/ai/check-spelling/route.ts` (new),
 `src/components/admin/QuestionEditor.tsx`,
 `src/app/play/[sessionId]/results/page.tsx`.
 
+## 60. Presentation Mode — real fullscreen unified, dedicated live-question layout, leaderboard polish
+
+Working through the large "professional presentation system" spec.
+Explained my reasoning on the harder calls before touching code (browser
+fullscreen limitations, why ICQR isn't suitable to depend on — checked
+the real site, it's a single-use consumer tool with no visible API —
+and why I'd build the QR concept as a static decorative frame rather
+than an animated 3D scene, given the spec's own priority that scanning
+reliability matters more than visual effects).
+
+**Fixed a real inconsistency**: this app had two different "fullscreen"
+buttons behaving differently — the dashboard's own used the real
+browser Fullscreen API correctly, but "Show QR full screen" only faked
+it with a CSS overlay that never actually hid the browser's tabs/address
+bar. Unified both onto one shared hook using the real API everywhere.
+
+**New: a genuine Presentation Mode**, not the admin page scaled up. One
+button enters real fullscreen AND swaps in a dedicated, simplified
+layout the moment a question is live or revealed — no stat cards, no
+session-management controls, just quiz title, question number, the
+question, options, and a large visible timer, using `clamp()`-based
+type sizing so it scales sensibly from a 1366×768 laptop up to a 4K
+display without separate breakpoints. Automatically falls back to the
+normal admin view if fullscreen is exited (Esc, or otherwise), so
+there's no way to get stuck in the simplified view without the
+fullscreen it's meant to go with.
+
+**Leaderboard**: added its own fullscreen button, and gave 1st place
+distinctly stronger visual emphasis (larger card, glow, bigger type)
+beyond the existing gold border/medals for 2nd-3rd.
+
+**Caught and fixed a real mistake of my own along the way**: an invalid
+tool parameter on one edit silently deleted the entire individual-ranking
+row-rendering block instead of modifying it. Caught it immediately via
+the compile check (the file referenced code that no longer existed) and
+restored it correctly, with the intended enhancement included — flagging
+this plainly rather than leaving it unmentioned.
+
+**What this round does NOT include yet** — genuinely large remaining
+scope, listed honestly rather than implied as done:
+- The QR page's own decorative watch-motif treatment (frame elements
+  around the code, never touching it)
+- A dedicated full-screen "quiz complete" congratulations layout
+- Full responsive verification across all the listed resolutions —
+  the `clamp()`-based approach is designed for this, but not verified
+  screen-by-screen
+- The animated/3D watch concept — recommended against building this at
+  all, for the reliability reasons explained above; open to revisiting
+  as its own separately-scoped project if wanted after seeing this
+
+Files: `src/lib/useFullscreen.ts` (new),
+`src/components/admin/PresentationView.tsx` (new),
+`src/components/admin/AdminSessionDashboard.tsx`,
+`src/app/leaderboard/[sessionId]/page.tsx`.
+
+## 61. Integrated the 3D watch QR experience — as an option, not a replacement
+
+Reviewed the uploaded file carefully before integrating anything, since
+QR reliability is non-negotiable. The actual QR generation checked out
+well: a real, well-known QR library, error-correction level H (the most
+robust setting), a proper 4-module quiet zone, pure black-on-white
+contrast, and — most importantly — the final code is drawn flat on an
+ordinary 2D canvas, never rotated or mapped onto the 3D scene. That's
+exactly right.
+
+**Three real fixes made before this could actually work:**
+- The destination URL was hardcoded to the generic join page — it now
+  reads the real target from a query parameter, so it can point at your
+  actual per-session join link instead of always the same static one.
+- No fallback existed if a laptop can't initialize WebGL (older
+  hardware, hardware acceleration disabled, an unusual browser) — it
+  would have shown a blank, broken screen in front of a room. Added a
+  check that skips straight to the plain scannable QR if WebGL isn't
+  available.
+- The QR reveal required someone to physically tap the screen, with no
+  fallback — added a 6-second auto-reveal if nobody interacts, so the
+  QR is guaranteed to appear within a bounded time either way. Tapping
+  sooner still gives the full animated reveal.
+
+**Integration choice, and why**: added as an "Open 3D watch experience"
+link next to the existing QR panel, opening in a **new browser tab**
+rather than embedded in the dashboard. A real WebGL scene nested inside
+the existing page is one more thing that could visibly fail live, in
+front of a room, for very little practical benefit over a separate tab
+— and this way, your existing, always-reliable QR panel stays exactly
+as it is, completely unaffected by whether the 3D experience works
+perfectly on any given laptop.
+
+Files: `public/watch-qr.html` (new),
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
