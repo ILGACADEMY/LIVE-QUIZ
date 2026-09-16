@@ -1655,6 +1655,35 @@ collapsing the sequence to a near-instant transition.
 Files: `public/watch-transform.html` (new, replaces the earlier
 `public/watch-qr.html`), `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 64. Fixed: watch QR experience showing nothing after exploding
+
+Two real, separate problems, both now fixed and independently
+re-verified:
+
+**The likely root cause of "nothing shown, no QR code"**: the QR library
+was loading from an external CDN at runtime. If that request is
+blocked, slow, or fails for any reason on a given network — plausible
+in an office/venue network, unlike my own test environment — the entire
+script would die silently with nothing visible and no explanation.
+Fixed by embedding the library's actual source directly in the file
+instead of loading it externally — verified by re-testing with every
+external CDN request explicitly blocked, and confirming it still works
+perfectly with zero errors. There is no longer any runtime network
+dependency for anything that matters here. Also wrapped the whole setup
+in a try/catch that shows a visible, readable message if anything else
+ever goes wrong, instead of a silent blank/frozen screen.
+
+**The interaction model, changed per direct instruction**: it now starts
+on the fully assembled watch and waits — "TAP THE WATCH" — instead of
+auto-playing immediately on load. A tap explodes it and reveals the QR,
+exactly as described. A 6-second safety net still auto-triggers the
+reveal if nobody taps, so it's never permanently gated on that either —
+verified by testing both paths independently (a real click, and zero
+interaction at all), confirming both correctly end on a QR that
+independently decodes to the right URL.
+
+Files: `public/watch-transform.html`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
