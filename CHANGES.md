@@ -1844,6 +1844,45 @@ saved" to reflect this directly.
 Files: `src/components/admin/QuestionEditor.tsx`,
 `src/components/admin/QuizEditor.tsx`.
 
+## 72. Found a third instance of the image-cropping bug — the one actually seen on the presenter screen
+
+The screenshot you sent turned out to be the regular admin dashboard's
+own live-question view, not my Presentation Mode layout — a different
+piece of code I hadn't checked yet. It was still using `object-cover`
+(crops the image to fill its box exactly, cutting off whatever doesn't
+fit), the same issue already fixed on the participant's phone a couple
+of updates ago. That's very likely the actual cause of the odd/distorted
+look — not the source photo itself. Switched it to `object-contain`,
+matching the participant page and presentation view, so all three
+places where a question image can appear now behave identically:
+shown in full, never cropped, regardless of its original proportions.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
+## 73. Video questions now autoplay instead of requiring a manual tap
+
+Added `autoPlay` (plus `playsInline`, so it plays inline on iPhone
+rather than forcing fullscreen) to all three places a question video
+can appear — the participant's phone, the presenter's screen, and
+presentation mode — each now starts playing automatically the moment
+that question appears. Also added a key so React creates a fresh video
+element per question, which is what makes autoplay reliably re-trigger
+each time rather than only working the first time.
+
+**One honest caveat**: browsers block videos from autoplaying *with
+sound* unless the visitor has already interacted with the page in some
+way. In practice this should rarely matter here — by the time a video
+question appears, the participant has already tapped to join and likely
+answered earlier questions, which satisfies that requirement in every
+major browser. The one edge case where it could still get blocked is a
+video on the very first question, before any interaction at all — if
+that happens, the video simply falls back to needing a manual tap
+rather than failing outright.
+
+Files: `src/app/play/[sessionId]/page.tsx`,
+`src/components/admin/PresentationView.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

@@ -423,7 +423,9 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
 
           {q.question.image_url && q.question.media_type === "video" ? (
             <video
+              key={q.question.image_url}
               src={q.question.image_url}
+              autoPlay
               controls
               playsInline
               className="w-full max-h-64 object-contain bg-black border border-hairline mb-6"

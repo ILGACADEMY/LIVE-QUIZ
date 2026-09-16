@@ -120,7 +120,7 @@ export default function PresentationView({
       {question.imageUrl && (
         <div className="mb-[3vh] max-h-[28vh] flex items-center justify-center">
           {question.mediaType === "video" ? (
-            <video src={question.imageUrl} controls className="max-h-[28vh] object-contain bg-black" />
+            <video key={question.imageUrl} src={question.imageUrl} autoPlay playsInline controls className="max-h-[28vh] object-contain bg-black" />
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={question.imageUrl} alt="" className="max-h-[28vh] object-contain" />

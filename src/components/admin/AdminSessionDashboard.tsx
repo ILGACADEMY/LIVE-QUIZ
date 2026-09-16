@@ -424,9 +424,9 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
             <p className="text-2xl md:text-3xl font-display italic mb-4">{state.question.questionText}</p>
             {state.question.imageUrl &&
               (state.question.mediaType === "video" ? (
-                <video src={state.question.imageUrl} controls className="w-full max-h-72 object-contain bg-black mb-4" />
+                <video key={state.question.imageUrl} src={state.question.imageUrl} autoPlay playsInline controls className="w-full max-h-72 object-contain bg-black mb-4" />
               ) : (
-                <img src={state.question.imageUrl} alt="" className="w-full max-h-72 object-cover mb-4" />
+                <img src={state.question.imageUrl} alt="" className="w-full max-h-72 object-contain bg-black/20 mb-4" />
               ))}
 
             {state.phase === "revealed" ? (
