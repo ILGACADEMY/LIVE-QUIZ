@@ -1684,6 +1684,29 @@ independently decodes to the right URL.
 
 Files: `public/watch-transform.html`.
 
+## 65. Back to automated: 2-second hold, then explode into the QR
+
+Per direct instruction: removed the tap-to-begin requirement. It now
+shows the complete assembled watch, waits 2 seconds automatically, then
+explodes and reveals the QR — no interaction needed, matching the
+simpler automated behavior from the very first version, but with your
+real watch instead of a generated one. A tap still works as an early
+skip-ahead, it's just no longer required.
+
+**On the "watch looks like mixed-up parts" report**: I tested this
+specifically at your exact embed size (480×480, matching the iframe box
+in the dashboard) and the watch renders complete and correctly
+proportioned on my end — I couldn't reproduce the issue as shown. My
+best explanation is a cached older file being served (static files can
+be cached at the CDN or browser level), which a fresh deployment plus a
+hard refresh should clear. Flagging this honestly rather than claiming
+a fix for something I can't actually reproduce — if it still looks
+wrong after redeploying and hard-refreshing, the next thing worth doing
+is checking that specific browser's console for an actual error, which
+would tell us something concrete rather than guessing further.
+
+Files: `public/watch-transform.html`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

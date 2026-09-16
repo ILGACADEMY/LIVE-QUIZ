@@ -147,7 +147,7 @@
     <p class="state" id="stateText"></p>
     <p class="sub" id="subText"></p>
   </div>
-  <p id="hint">TAP THE WATCH</p>
+  <p id="hint">TAP TO SKIP AHEAD</p>
   <p class="sr-only" id="srAnnounce" aria-live="polite"></p>
 
   <!-- Visible fallback if anything genuinely fails -- never just a
@@ -2576,9 +2576,11 @@ function showAssembled() {
   setClass("assembled");
   setCaption("", "");
   awaitingTap = true;
-  // Safety net: if nobody taps within 6s, reveal the QR anyway --
-  // this screen may be running unattended in a waiting room.
-  after(6000, () => { if (awaitingTap) explodeAndReveal(); });
+  // Automated by default, per direct instruction: show the complete
+  // watch, then after 2 seconds explode it and reveal the QR --
+  // no tap required. Tapping early still works too, it just skips
+  // the wait rather than being the only way to trigger it.
+  after(2000, () => { if (awaitingTap) explodeAndReveal(); });
 }
 
 function explodeAndReveal() {
