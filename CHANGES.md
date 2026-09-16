@@ -1580,6 +1580,81 @@ perfectly on any given laptop.
 Files: `public/watch-qr.html` (new),
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 62. 3D watch experience is now the default on the launch page, with a one-click fallback
+
+Reversed the priority from item 61, per direct instruction: the 3D
+experience is now embedded directly on the launch/waiting page itself
+(a same-origin iframe, not a separate tab), with **"Show QR code
+instead"** right next to it — one click swaps to the plain, always-
+reliable QR, now shown notably larger (460px, up from 340px) than
+before, exactly for the case the 3D scene doesn't render properly on a
+given laptop. A second button switches back to try the 3D experience
+again. This is a deliberate trade — embedding does carry more real risk
+than a separate tab (nesting a WebGL scene in the existing dashboard is
+one more thing that could misbehave), but the explicit, always-visible
+fallback right next to it is what makes that an acceptable trade rather
+than a real live-session risk.
+
+Files: `src/components/admin/AdminSessionDashboard.tsx`.
+
+## 63. Real watch → QR transformation, built from your actual photographed watch
+
+Replaces the earlier generic 3D concept entirely with one built from
+your two supplied photos of the real ILG watch.
+
+**How the real components were isolated**: not manually traced or
+redrawn — connected-component analysis on the alpha channel of your
+exploded-parts photo (which was already a clean transparent PNG),
+automatically detecting and cropping each of the 9 distinct pieces:
+case, bezel, crystal, crown, dial, hands, movement, and both strap
+pieces. Every pixel on screen is your actual photographed watch.
+
+**One honest technical correction from the original brief**: built as a
+2D layered sprite animation (CSS 3D transforms for real depth/rotation),
+not a true 3D engine. A photograph isn't a 3D model — building a fake
+mesh would mean replacing your real watch with a generated
+approximation, which is exactly what was asked not to do.
+
+**The 4 stages, matching the brief**: assemble (components converge
+into the real watch, correctly proportioned — case, movement, dial,
+hands, crystal, bezel genuinely stacked concentrically, crown at the
+case edge, straps attached top and bottom) → hold with "READY?" / "SCAN
+TO JOIN" → dramatic explode → transform, where the real components
+shrink away while colored particles (sampled from each component's own
+actual color) flow toward the QR's real dark-module positions as it
+fades in.
+
+**On the "intelligent" component-to-QR-module mapping** described in the
+brief (movement becomes dense central modules, dial becomes a major
+block, etc.): built as color-sampled particles flowing toward real QR
+positions rather than a literally hand-curated per-module mapping — a
+reasonable scope trade-off given the complexity of that level of
+precision versus the visual payoff, called out honestly rather than
+quietly simplified.
+
+**Verification — this is the part that actually matters, and none of it
+was assumed**:
+- Rendered the real page in an actual headless browser and screenshotted
+  every stage
+- Caught a real bug this way that pure code review wouldn't have shown:
+  the watch components were snapping back to full visibility once the
+  final QR state settled, because the "shrink and hide" CSS rule only
+  covered the transitioning state, not the settled one — this would
+  have obscured the QR exactly as the brief's critical requirement
+  warns against. Fixed and re-verified.
+- **Actually decoded the rendered QR** with an independent third-party
+  scanner (not "it looks like a QR" — a real scan) and confirmed it
+  reads back the exact correct URL, for both the default destination
+  and a dynamic per-session join link passed via query parameter.
+
+Auto-plays and loops (assemble → hold → explode → transform → hold on
+QR → repeat after 9 seconds); a tap, spacebar, or R key replays
+immediately at any point. Respects `prefers-reduced-motion` by
+collapsing the sequence to a near-instant transition.
+
+Files: `public/watch-transform.html` (new, replaces the earlier
+`public/watch-qr.html`), `src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

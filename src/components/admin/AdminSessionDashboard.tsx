@@ -70,6 +70,13 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   // whatever), so there's no way to get stuck in a simplified view
   // without the fullscreen that's meant to go with it.
   const [presentationMode, setPresentationMode] = useState(false);
+  // "watch3d" is the default on the launch page itself now — the flat
+  // QR is one click away as an explicit fallback, exactly for the case
+  // the 3D scene doesn't render on a given laptop (older hardware, no
+  // WebGL, an unusual browser). Resets to 3D each time a fresh session
+  // reaches the waiting screen, rather than remembering a past choice
+  // across different sessions.
+  const [qrDisplayMode, setQrDisplayMode] = useState<"watch3d" | "flatQR">("watch3d");
   useEffect(() => {
     if (!isFullscreen) setPresentationMode(false);
   }, [isFullscreen]);
@@ -330,9 +337,25 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
 
         {state.status === "waiting" && (
           <section className="case-panel p-10 md:p-16 mb-5 flex flex-col md:flex-row items-center justify-center gap-14">
-            <div className="bg-ivory p-5 shrink-0">
-              <QRCodeSVG value={joinUrl} size={340} bgColor="#F3EDE1" fgColor="#12100D" />
-            </div>
+            {qrDisplayMode === "watch3d" ? (
+              <div className="bg-charcoal border border-hairline shrink-0 overflow-hidden" style={{ width: 480, height: 480 }}>
+                {/* Same-origin static file, not a third-party embed — see
+                    public/watch-transform.html. If this doesn't render properly
+                    on a given laptop (older hardware, no WebGL, an
+                    unusual browser), "Show QR code instead" below swaps
+                    to the always-reliable flat QR immediately. */}
+                <iframe
+                  src={`/watch-transform.html?url=${encodeURIComponent(joinUrl)}`}
+                  className="w-full h-full border-0"
+                  title="3D watch QR experience"
+                  allow="fullscreen"
+                />
+              </div>
+            ) : (
+              <div className="bg-ivory p-6 shrink-0">
+                <QRCodeSVG value={joinUrl} size={460} bgColor="#F3EDE1" fgColor="#12100D" />
+              </div>
+            )}
             <div>
               <MeridianWordmark size="large" align="left" />
               <p className="font-display italic text-3xl mt-5 mb-3">Scan to join</p>
@@ -348,22 +371,15 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
                 <button onClick={enterFullscreen} className="btn-ghost text-base px-5 py-2.5">
                   Show QR full screen
                 </button>
-                {/* Opens in a new tab rather than an embedded iframe —
-                    a real 3D/WebGL scene nested inside this page carries
-                    real risk (older laptops, unusual browsers, one more
-                    thing that could visibly fail in front of a room),
-                    and a plain new tab sidesteps that entirely while
-                    still landing on exactly this session's real join
-                    link. The QR panel here stays as the always-available
-                    fallback regardless of how that tab behaves. */}
-                <a
-                  href={`/watch-qr.html?url=${encodeURIComponent(joinUrl)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-ghost text-base px-5 py-2.5"
-                >
-                  Open 3D watch experience
-                </a>
+                {qrDisplayMode === "watch3d" ? (
+                  <button onClick={() => setQrDisplayMode("flatQR")} className="btn-ghost text-base px-5 py-2.5">
+                    Show QR code instead
+                  </button>
+                ) : (
+                  <button onClick={() => setQrDisplayMode("watch3d")} className="btn-ghost text-base px-5 py-2.5">
+                    Try 3D experience
+                  </button>
+                )}
               </div>
             </div>
           </section>
