@@ -17,6 +17,22 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   const router = useRouter();
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [questions, setQuestions] = useState<EditableQuestion[]>([]);
+  // save() reads from these refs, not the state variables directly —
+  // a real bug this fixes: save() is a plain closure captured at render
+  // time, so if it's invoked using an OLDER render's closure (a click
+  // landing before React has re-rendered with the very latest edit —
+  // realistic right after an async image upload resolves), it would
+  // silently send stale data to the database, missing whatever was just
+  // uploaded or typed. Refs always hold the current value regardless of
+  // which render's closure save() was called from.
+  const quizRef = useRef(quiz);
+  const questionsRef = useRef(questions);
+  useEffect(() => {
+    quizRef.current = quiz;
+  }, [quiz]);
+  useEffect(() => {
+    questionsRef.current = questions;
+  }, [questions]);
   const [tab, setTab] = useState<Tab>("questions");
   const [activeIndex, setActiveIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -140,13 +156,18 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
     });
   }
 
-  async function save(publish?: boolean) {
-    if (!quiz) return;
-    setSaving(true);
-    setToast(null);
+  // Takes the quiz/questions data to send EXPLICITLY, rather than reading
+  // from state or refs — this is what lets the media auto-save below
+  // persist immediately with zero dependency on whether a state update
+  // has propagated yet, closing the gap entirely rather than narrowing it.
+  async function persist(quizData: Quiz, questionsData: EditableQuestion[], publish?: boolean, silent?: boolean) {
+    if (!silent) {
+      setSaving(true);
+      setToast(null);
+    }
     const payload = {
-      quiz: { ...quiz, status: publish ? "published" : quiz.status },
-      questions
+      quiz: { ...quizData, status: publish ? "published" : quizData.status },
+      questions: questionsData
     };
     try {
       const res = await fetch(`/api/quizzes/${quizId}`, {
@@ -157,15 +178,36 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         if (publish) setQuiz((q) => (q ? { ...q, status: "published" } : q));
-        setToast({ type: "success", text: publish ? "✓ Saved and published" : "✓ Saved" });
-      } else {
+        if (!silent) setToast({ type: "success", text: publish ? "✓ Saved and published" : "✓ Saved" });
+      } else if (!silent) {
         setToast({ type: "error", text: data.error ?? "Could not save. Please try again." });
       }
+      return res.ok;
     } catch {
-      setToast({ type: "error", text: "Network error — check your connection and try again." });
+      if (!silent) setToast({ type: "error", text: "Network error — check your connection and try again." });
+      return false;
     } finally {
-      setSaving(false);
+      if (!silent) setSaving(false);
     }
+  }
+
+  async function save(publish?: boolean) {
+    if (!quizRef.current) return;
+    await persist(quizRef.current, questionsRef.current, publish);
+  }
+
+  // Called the instant a media upload succeeds — persists that one
+  // question's new image/video immediately, silently (no toast, since
+  // this isn't a user-initiated save), rather than leaving it as
+  // on-screen-only state until a separate manual Save click. That gap
+  // was the actual bug: the upload genuinely succeeded, but reloading or
+  // navigating away before clicking Save meant it was never written to
+  // the database at all.
+  function handleMediaSaved(index: number, updatedQuestion: EditableQuestion) {
+    if (!quizRef.current) return;
+    const updatedQuestions = questionsRef.current.map((q, idx) => (idx === index ? updatedQuestion : q));
+    setQuestions(updatedQuestions);
+    persist(quizRef.current, updatedQuestions, undefined, true);
   }
 
   if (!quiz) return <main className="min-h-screen px-6 py-10 text-parchment/50">Loading…</main>;
@@ -578,6 +620,7 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
                   onMoveUp={() => moveQuestion(activeIndex, -1)}
                   onMoveDown={() => moveQuestion(activeIndex, 1)}
                   advancedMode={advancedMode}
+                  onMediaSaved={handleMediaSaved}
                 />
               )}
             </div>

@@ -61,7 +61,8 @@ export default function QuestionEditor({
   onDelete,
   onMoveUp,
   onMoveDown,
-  advancedMode = true
+  advancedMode = true,
+  onMediaSaved
 }: {
   index: number;
   total: number;
@@ -72,6 +73,14 @@ export default function QuestionEditor({
   onMoveUp: () => void;
   onMoveDown: () => void;
   advancedMode?: boolean;
+  // Called with the fully-updated question object right when an upload
+  // succeeds, passed explicitly rather than relying on React state/props
+  // having propagated by then — so the parent can persist it immediately
+  // without any risk of a timing gap. Fixes a real bug: previously,
+  // image_url only updated on-screen state; if the page was reloaded or
+  // navigated away before separately clicking Save, the upload appeared
+  // to work but was never actually persisted to the database.
+  onMediaSaved?: (index: number, updatedQuestion: EditableQuestion) => void;
 }) {
   const [uploading, setUploading] = useState(false);
   const [spellChecking, setSpellChecking] = useState(false);
@@ -242,8 +251,16 @@ export default function QuestionEditor({
       }
 
       console.log("[upload] SUCCESS. Public URL:", signData.publicUrl);
+      const mediaType = signData.mediaType ?? (isVideo ? "video" : "image");
       set("image_url", signData.publicUrl);
-      set("media_type", signData.mediaType ?? (isVideo ? "video" : "image"));
+      set("media_type", mediaType);
+      // Persisted immediately, not left for a separate manual Save click
+      // to remember — passing the merged object and this question's own
+      // index explicitly (both captured in this closure, from the
+      // moment the upload started) rather than reading the parent's
+      // current active index later, which could have moved on to a
+      // different question by the time this async upload resolves.
+      onMediaSaved?.(index, { ...question, image_url: signData.publicUrl, media_type: mediaType });
     } catch (err) {
       console.error("[upload] Threw an exception:", err);
       setUploadError(
@@ -347,7 +364,7 @@ export default function QuestionEditor({
               )}
               {question.image_url && (
                 <span className="absolute top-1.5 right-1.5 bg-charcoal/90 text-gold text-[10px] px-1.5 py-0.5 border border-gold/40">
-                  ✓ Uploaded
+                  ✓ Uploaded & saved
                 </span>
               )}
             </div>

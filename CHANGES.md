@@ -1814,6 +1814,36 @@ a way to actually see what's happening next time.
 
 Files: `src/components/admin/QuestionEditor.tsx`.
 
+## 71. Found and fixed the actual cause of uploaded images disappearing
+
+The diagnostic logging from the last update paid off — it proved the
+upload itself was genuinely succeeding (server accepted it, file landed
+in storage, a real public URL came back) even while the editor kept
+showing "No image or video yet." That combination pointed at something
+more specific than an upload failure: a gap between what shows on
+screen and what's actually written to the database.
+
+**The real cause**: uploading a media file updated the on-screen state
+immediately, but only got permanently saved to the database the next
+time the separate "Save" button was clicked — the same as any other
+edit to a question. If the page was reloaded or navigated away from
+before that manual save, the upload looked successful in the moment but
+was never actually persisted, and reappeared as blank on reload. This
+also matches "sometimes it comes up" after switching to Settings and
+back — that was really just about whether Save had been clicked in
+between, not the tab switch itself doing anything.
+
+**The fix**: a successful upload now saves itself immediately and
+automatically — no separate manual Save required for media
+specifically. Built this to pass the freshly-uploaded data explicitly
+through the save call rather than depending on React state having
+finished propagating first, which also closes a second, more subtle
+timing gap in the same area. The upload badge now reads "✓ Uploaded &
+saved" to reflect this directly.
+
+Files: `src/components/admin/QuestionEditor.tsx`,
+`src/components/admin/QuizEditor.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
