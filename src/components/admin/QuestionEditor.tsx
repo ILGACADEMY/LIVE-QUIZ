@@ -185,6 +185,7 @@ export default function QuestionEditor({
   const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
   async function handleUpload(file: File) {
+    console.log("[upload] handleUpload started for:", file.name, file.type, `${(file.size / 1024).toFixed(0)}KB`);
     setUploadError(null);
     // Checked immediately, before any network call at all — so an
     // oversized file is caught and explained the instant it's picked,
@@ -202,6 +203,7 @@ export default function QuestionEditor({
 
     setUploading(true);
     try {
+      console.log("[upload] Requesting signed upload URL from /api/upload/sign…");
       // Step 1: ask our server for a one-time signed upload token (a tiny
       // JSON request — no file bytes involved, so this part never hits
       // any body-size limit).
@@ -210,6 +212,7 @@ export default function QuestionEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: file.name, fileType: file.type })
       });
+      console.log("[upload] /api/upload/sign responded with status:", signRes.status);
       const signData = await signRes.json().catch(() => ({}));
       if (!signRes.ok) {
         setUploadError(
@@ -224,6 +227,7 @@ export default function QuestionEditor({
         return;
       }
 
+      console.log("[upload] Got signed URL, uploading file bytes to storage…");
       // Step 2: send the actual file bytes DIRECTLY to Supabase Storage
       // using that token — this never passes through our own server, so
       // Vercel's ~4.5MB serverless request-body limit never applies here,
@@ -232,13 +236,16 @@ export default function QuestionEditor({
         .from("quiz-images")
         .uploadToSignedUrl(signData.path, signData.token, file);
       if (storageError) {
+        console.error("[upload] Storage upload FAILED:", storageError);
         setUploadError(`Upload failed: ${storageError.message}`);
         return;
       }
 
+      console.log("[upload] SUCCESS. Public URL:", signData.publicUrl);
       set("image_url", signData.publicUrl);
       set("media_type", signData.mediaType ?? (isVideo ? "video" : "image"));
     } catch (err) {
+      console.error("[upload] Threw an exception:", err);
       setUploadError(
         `Network error — the upload never reached the server (${err instanceof Error ? err.message : "unknown cause"}). Check your connection and try again.`
       );
@@ -350,9 +357,20 @@ export default function QuestionEditor({
                 type="file"
                 accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                 className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
+                onChange={(e) => {
+                  console.log("[upload] File input changed. Files selected:", e.target.files?.length ?? 0, e.target.files?.[0]?.name);
+                  if (e.target.files?.[0]) handleUpload(e.target.files[0]);
+                }}
               />
-              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
+              <button
+                type="button"
+                onClick={() => {
+                  console.log("[upload] Upload button clicked, opening file picker…");
+                  fileInput.current?.click();
+                }}
+                disabled={uploading}
+                className="btn-ghost px-4 py-2 text-sm"
+              >
                 {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
               </button>
               <p className="text-parchment/30 text-xs max-w-[220px]">

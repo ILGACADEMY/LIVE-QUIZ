@@ -1800,6 +1800,20 @@ before answering" case.
 Files: `src/components/admin/QuestionEditor.tsx`,
 `src/app/play/[sessionId]/page.tsx`.
 
+## 70. Diagnostic logging added for the ongoing upload investigation
+
+Still haven't been able to identify the actual cause of the reported
+upload issue — every code-level check so far looks correct, and the
+"nothing at all in the Network tab" result is unusual enough that
+guessing further isn't productive. Added explicit `[upload]`-prefixed
+console messages at every step of the flow (button clicked, file
+selected, request sent, response received, success or failure) so the
+next test attempt produces unambiguous, specific evidence instead of
+relying on correctly reading Network/Console tabs. Not a claimed fix —
+a way to actually see what's happening next time.
+
+Files: `src/components/admin/QuestionEditor.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
