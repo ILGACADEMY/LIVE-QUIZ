@@ -1707,6 +1707,40 @@ would tell us something concrete rather than guessing further.
 
 Files: `public/watch-transform.html`.
 
+## 66. Reverted to the original watch design, now fully automated
+
+Per direct instruction: back to using the original uploaded 3D watch
+experience exactly as designed (not the real-photo version from the
+last several updates), with the interaction model changed to fully
+automatic — no tap required anywhere in the sequence. It already
+auto-assembled and auto-exploded on its own timer; the one remaining
+manual gate (exploded → reveal the QR) now also advances on its own
+after a short hold, matching every other stage.
+
+**An honest note on how this went**: my first attempt at combining these
+fixes contained a scripting mistake that caused the whole edit to fail
+partway through — which meant none of that attempt's changes were
+actually saved to the file, though nothing surfaced that at the time. I
+then made a follow-up edit assuming the earlier ones had gone through,
+which they hadn't — so the very first version I described as "fixed and
+automated" genuinely wasn't, on either count. This is exactly why I
+re-verify with a real headless-browser render and an independent QR
+decode rather than trusting that an edit script completing without an
+error means the fix actually landed — that testing is what caught it
+this time, before shipping it. Redid the whole set of fixes from a
+clean copy of your uploaded file, verified each one individually, and
+confirmed end-to-end with zero clicks: the sequence completes on its
+own in ~9.4 seconds and lands on a QR that independently decodes to the
+correct URL — tested for both the default destination and a real
+per-session join link.
+
+Same underlying reliability fixes as before remain in place: the QR
+library no longer depends on reaching an external CDN at runtime, and
+there's a visible fallback (plain scannable QR) if WebGL isn't
+available at all, rather than a blank screen.
+
+Files: `public/watch-transform.html` (rebuilt from the original upload).
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
