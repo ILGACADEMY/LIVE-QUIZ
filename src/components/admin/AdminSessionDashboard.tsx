@@ -285,6 +285,11 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
           question={state.question}
           phase={state.phase as "question" | "revealed"}
           phaseDeadline={state.phaseDeadline}
+          sessionId={sessionId}
+          busy={busy}
+          onAdvance={advance}
+          onEndQuiz={endQuiz}
+          onExit={exitFullscreen}
         />
       ) : (
       <div className="max-w-[1400px] w-full mx-auto">

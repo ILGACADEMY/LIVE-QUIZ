@@ -1741,6 +1741,27 @@ available at all, rather than a blank screen.
 
 Files: `public/watch-transform.html` (rebuilt from the original upload).
 
+## 67. Presentation mode: added the missing explanation text and presenter controls
+
+Two real gaps, both fixed:
+
+- **The answer explanation wasn't shown on reveal** — the data was
+  already there (same field the normal admin view already displays),
+  it just was never passed through to the presentation layout. Now
+  shows below the response chart, exactly where it belongs.
+- **No way to control the quiz from presentation mode** — this app has
+  no separate presenter-only monitor, so the same screen the room sees
+  is the only one the presenter has to work from. A fully controlless
+  layout looked cleaner but left no way to advance the quiz without
+  leaving presentation mode entirely. Added a small, deliberately
+  unobtrusive control bar in the top-right corner: Reveal answer/Next
+  question (label changes appropriately), End quiz, Leaderboard, Exit —
+  same underlying actions as the normal dashboard buttons, just
+  available without leaving the presentation layout.
+
+Files: `src/components/admin/PresentationView.tsx`,
+`src/components/admin/AdminSessionDashboard.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

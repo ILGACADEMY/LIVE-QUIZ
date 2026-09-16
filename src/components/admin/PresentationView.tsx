@@ -9,6 +9,7 @@ interface PresentationQuestion {
   mediaType: "image" | "video";
   options: { key: "A" | "B" | "C" | "D"; text: string }[];
   correctOption?: "A" | "B" | "C" | "D";
+  explanation?: string;
   distribution?: { key: "A" | "B" | "C" | "D"; count: number; percent: number }[];
 }
 
@@ -21,6 +22,13 @@ interface PresentationQuestion {
  * highly visible timer. Typography uses clamp() so it scales sensibly
  * from a 1366×768 laptop panel up to a 4K TV without needing separate
  * breakpoints for each.
+ *
+ * Presenter controls live here too, in a small unobtrusive corner bar
+ * — this app has no separate presenter-only monitor, so the presenter's
+ * own screen is the same one the room sees. Leaving it fully controlless
+ * would look cleaner but strands the presenter with no way to advance
+ * the quiz without leaving presentation mode entirely, which defeats
+ * the point.
  */
 export default function PresentationView({
   quizTitle,
@@ -28,7 +36,12 @@ export default function PresentationView({
   totalQuestions,
   question,
   phase,
-  phaseDeadline
+  phaseDeadline,
+  sessionId,
+  busy,
+  onAdvance,
+  onEndQuiz,
+  onExit
 }: {
   quizTitle: string;
   questionNumber: number;
@@ -36,9 +49,54 @@ export default function PresentationView({
   question: PresentationQuestion;
   phase: "question" | "revealed";
   phaseDeadline: string | null;
+  sessionId: string;
+  busy: boolean;
+  onAdvance: () => void;
+  onEndQuiz: () => void;
+  onExit: () => void;
 }) {
+  const isLastQuestion = questionNumber >= totalQuestions;
+  const advanceLabel = phase === "question" ? "Reveal answer" : isLastQuestion ? "End quiz" : "Next question";
+
   return (
     <div className="fixed inset-0 bg-charcoal flex flex-col items-center px-[4vw] py-[3vh] overflow-hidden">
+      {/* Small, deliberately unobtrusive — this is a control bar for the
+          presenter, not something the room's attention should go to. */}
+      <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
+        {phase === "question" || !isLastQuestion ? (
+          <button
+            onClick={onAdvance}
+            disabled={busy}
+            className="text-xs px-3 py-1.5 border border-hairline text-parchment/60 hover:text-gold hover:border-gold bg-charcoal/60"
+          >
+            {advanceLabel}
+          </button>
+        ) : (
+          <span className="text-xs px-3 py-1.5 text-parchment/30">Ending automatically…</span>
+        )}
+        <button
+          onClick={onEndQuiz}
+          disabled={busy}
+          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-crimson hover:border-crimson bg-charcoal/60"
+        >
+          End quiz
+        </button>
+        <a
+          href={`/leaderboard/${sessionId}`}
+          target="_blank"
+          rel="noreferrer"
+          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-gold hover:border-gold bg-charcoal/60"
+        >
+          Leaderboard
+        </a>
+        <button
+          onClick={onExit}
+          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-gold hover:border-gold bg-charcoal/60"
+        >
+          Exit
+        </button>
+      </div>
+
       <p className="text-gold tracking-[0.3em]" style={{ fontSize: "clamp(0.8rem, 1.2vw, 1.1rem)" }}>
         ILG&nbsp;|&nbsp;ACADEMY
       </p>
@@ -73,6 +131,14 @@ export default function PresentationView({
       {phase === "revealed" ? (
         <div className="w-full max-w-[70vw]">
           <ResponseDistributionChart options={question.options} distribution={question.distribution} correctOption={question.correctOption} />
+          {question.explanation && (
+            <p
+              className="text-parchment/70 text-center mt-[2vh] max-w-[60vw] mx-auto"
+              style={{ fontSize: "clamp(0.85rem, 1.3vw, 1.15rem)", lineHeight: 1.5 }}
+            >
+              {question.explanation}
+            </p>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-[1.5vh] w-full max-w-[70vw]">
