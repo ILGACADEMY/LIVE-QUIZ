@@ -42,6 +42,7 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [participantId, setParticipantId] = useState<string | null>(null);
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState("🦉");
   const [countdownSeconds, setCountdownSeconds] = useState(3);
@@ -429,7 +430,21 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
             />
           ) : (
             q.question.image_url && (
-              <img src={q.question.image_url} alt="" className="w-full max-h-64 object-cover border border-hairline mb-6" />
+              <button
+                type="button"
+                onClick={() => setZoomedImage(q.question.image_url)}
+                className="relative w-full mb-6 block"
+                aria-label="Tap to view image larger"
+              >
+                {/* object-contain, not cover — a cropped case/dial detail
+                    defeats the point of showing the image at all when
+                    the whole reason to look closely is to inspect
+                    materials and finish before answering. */}
+                <img src={q.question.image_url} alt="" className="w-full max-h-64 object-contain bg-black/20 border border-hairline" />
+                <span className="absolute bottom-2 right-2 bg-charcoal/80 text-parchment/70 text-xs px-2 py-1 border border-hairline">
+                  Tap to enlarge
+                </span>
+              </button>
             )
           )}
 
@@ -442,6 +457,19 @@ export default function PlayPage({ params }: { params: { sessionId: string } }) 
 
           {errorMsg && <p className="text-crimson text-sm mt-6 text-center">{errorMsg}</p>}
         </div>
+
+        {zoomedImage && (
+          <button
+            type="button"
+            onClick={() => setZoomedImage(null)}
+            className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center p-4"
+            aria-label="Close enlarged image"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={zoomedImage} alt="" className="max-w-full max-h-[85vh] object-contain" />
+            <p className="text-parchment/50 text-sm mt-4">Tap anywhere to close</p>
+          </button>
+        )}
       </main>
     );
   }

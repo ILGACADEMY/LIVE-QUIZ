@@ -1776,6 +1776,30 @@ presentation mode.
 
 Files: `src/components/admin/QuestionEditor.tsx`.
 
+## 69. Upload failures now impossible to miss, checked before upload starts, plus a zoom view for participants
+
+**On "nothing is getting uploaded"**: I reviewed the upload code closely
+and couldn't find a silent-failure bug in it — errors were always being
+caught, just shown as small, easy-to-miss text. Rebuilt this
+defensively rather than guessing further: file size is now checked
+immediately when a file is picked (before any network call at all),
+with the exact file size shown in the warning; every other failure
+point (the server rejecting the request, the upload itself failing, a
+network error) now shows a much more prominent, specific message — a
+bordered warning box with the actual cause, not a vague "something went
+wrong." If it still fails after this, the message it shows now should
+say exactly why.
+
+**Participant image zoom**: the question image on a participant's phone
+is now tappable — opens full-screen at maximum size, tap anywhere to
+close. Also switched from a cropped view to an uncropped one for the
+inline image too, so case/dial details aren't cut off even before
+zooming in — directly for the "let them inspect materials and finish
+before answering" case.
+
+Files: `src/components/admin/QuestionEditor.tsx`,
+`src/app/play/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

@@ -185,16 +185,23 @@ export default function QuestionEditor({
   const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
 
   async function handleUpload(file: File) {
-    setUploading(true);
     setUploadError(null);
-    try {
-      const isVideo = file.type.startsWith("video/");
-      const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
-      if (file.size > maxBytes) {
-        setUploadError(`${isVideo ? "Video" : "Image"} must be under ${maxBytes / (1024 * 1024)}MB.`);
-        return;
-      }
+    // Checked immediately, before any network call at all — so an
+    // oversized file is caught and explained the instant it's picked,
+    // not after a failed round-trip that could look like nothing
+    // happened at all.
+    const isVideo = file.type.startsWith("video/");
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES;
+    if (file.size > maxBytes) {
+      setUploadError(
+        `That file is ${(file.size / (1024 * 1024)).toFixed(1)}MB — ${isVideo ? "videos" : "images"} must be under ${maxBytes / (1024 * 1024)}MB. Try a smaller file or compress it first.`
+      );
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
 
+    setUploading(true);
+    try {
       // Step 1: ask our server for a one-time signed upload token (a tiny
       // JSON request — no file bytes involved, so this part never hits
       // any body-size limit).
@@ -203,9 +210,17 @@ export default function QuestionEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fileName: file.name, fileType: file.type })
       });
-      const signData = await signRes.json();
+      const signData = await signRes.json().catch(() => ({}));
       if (!signRes.ok) {
-        setUploadError(signData.error ?? "Could not prepare the upload.");
+        setUploadError(
+          signData.error
+            ? `Could not prepare the upload: ${signData.error}`
+            : `Could not prepare the upload (server responded with status ${signRes.status}). Try again, or check that you're still logged into the admin.`
+        );
+        return;
+      }
+      if (!signData.path || !signData.token) {
+        setUploadError("Could not prepare the upload — the server's response was missing what it needed to. Try again.");
         return;
       }
 
@@ -223,10 +238,13 @@ export default function QuestionEditor({
 
       set("image_url", signData.publicUrl);
       set("media_type", signData.mediaType ?? (isVideo ? "video" : "image"));
-    } catch {
-      setUploadError("Network error — the upload never reached the server. Check your connection and try again.");
+    } catch (err) {
+      setUploadError(
+        `Network error — the upload never reached the server (${err instanceof Error ? err.message : "unknown cause"}). Check your connection and try again.`
+      );
     } finally {
       setUploading(false);
+      if (fileInput.current) fileInput.current.value = "";
     }
   }
 
@@ -356,7 +374,10 @@ export default function QuestionEditor({
             </div>
           </div>
           {uploadError && (
-            <p className="text-xs text-crimson mb-3">{uploadError}</p>
+            <div className="border border-crimson/50 bg-crimson/10 px-3 py-2.5 mb-3 flex items-start gap-2">
+              <span className="text-crimson text-sm shrink-0">⚠</span>
+              <p className="text-sm text-crimson/90">{uploadError}</p>
+            </div>
           )}
           <p className="text-xs text-parchment/50 mb-5">
             Images up to 5MB (JPG/PNG/WEBP). Videos up to 50MB (MP4/WEBM/MOV) — plays with sound on the participant's device, same as any video player.
