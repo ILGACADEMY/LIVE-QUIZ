@@ -306,38 +306,54 @@ export default function QuestionEditor({
       {advancedMode && (
         <>
           <label className="field-label block mb-2">Image or video (optional)</label>
-          <div className="flex items-center gap-4 mb-2">
-            {question.image_url && question.media_type === "video" ? (
-              <video
-                src={question.image_url}
-                controls
-                className="w-32 h-20 object-cover border border-hairline bg-black"
+          <div className="flex items-start gap-4 mb-2">
+            {/* Always-visible box, even before anything's uploaded — so
+                there's a clear, persistent reference point rather than
+                nothing at all, which made it hard to tell whether an
+                upload had actually gone through. */}
+            <div className="w-40 h-40 border border-hairline flex items-center justify-center shrink-0 bg-black/20 relative">
+              {question.image_url && question.media_type === "video" ? (
+                <video src={question.image_url} controls className="w-full h-full object-cover bg-black" />
+              ) : question.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={question.image_url} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <p className="text-parchment/30 text-xs text-center px-2">No image or video yet</p>
+              )}
+              {question.image_url && (
+                <span className="absolute top-1.5 right-1.5 bg-charcoal/90 text-gold text-[10px] px-1.5 py-0.5 border border-gold/40">
+                  ✓ Uploaded
+                </span>
+              )}
+            </div>
+            <div className="flex flex-col gap-2">
+              <input
+                ref={fileInput}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
               />
-            ) : question.image_url ? (
-              <img src={question.image_url} alt="" className="w-20 h-20 object-cover border border-hairline" />
-            ) : null}
-            <input
-              ref={fileInput}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
-              className="hidden"
-              onChange={(e) => e.target.files?.[0] && handleUpload(e.target.files[0])}
-            />
-            <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
-              {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
-            </button>
-            {question.image_url && (
-              <button
-                type="button"
-                onClick={() => {
-                  set("image_url", null);
-                  set("media_type", "image");
-                }}
-                className="text-xs text-crimson/80 hover:text-crimson"
-              >
-                Remove
+              <button type="button" onClick={() => fileInput.current?.click()} disabled={uploading} className="btn-ghost px-4 py-2 text-sm">
+                {uploading ? "Uploading…" : question.image_url ? "Replace media" : "+ Upload image or video"}
               </button>
-            )}
+              <p className="text-parchment/30 text-xs max-w-[220px]">
+                Shown to participants above the answer options while this question is live, and on the presenter's
+                screen in presentation mode.
+              </p>
+              {question.image_url && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    set("image_url", null);
+                    set("media_type", "image");
+                  }}
+                  className="text-xs text-crimson/80 hover:text-crimson text-left"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
           {uploadError && (
             <p className="text-xs text-crimson mb-3">{uploadError}</p>

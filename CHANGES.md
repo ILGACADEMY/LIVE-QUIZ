@@ -1762,6 +1762,20 @@ Two real gaps, both fixed:
 Files: `src/components/admin/PresentationView.tsx`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 68. Bigger, always-visible image/video upload preview
+
+The upload preview box was small (80×80px) and only appeared once
+something was uploaded — nothing shown beforehand meant there was no
+clear way to tell whether an upload had actually gone through. Now
+there's always a visible 160×160px box, showing "No image or video yet"
+when empty and a clear "✓ Uploaded" badge once something's there. Also
+added a line directly in the editor explaining where this image
+actually shows up: above the answer options on the participant's phone
+while the question is live, and on the presenter's screen in
+presentation mode.
+
+Files: `src/components/admin/QuestionEditor.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
