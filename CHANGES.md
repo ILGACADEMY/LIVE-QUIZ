@@ -2089,6 +2089,32 @@ never sit next to the wrong photo.
 Files: `src/lib/ai.ts`, `src/app/api/ai/describe-image/route.ts` (new),
 `src/components/admin/QuestionEditor.tsx`.
 
+## 79. Fixed: "Loading…" that never finishes, on My Quizzes and Manage accounts
+
+Found a real bug causing both screens to hang indefinitely instead of
+showing an error: when the request to load quizzes or accounts failed
+for any reason, the code correctly noticed the failure but never
+updated the loading state away from its initial empty value — so the
+screen stayed stuck on "Loading…" forever, with the actual error
+message sitting in state but never reachable, since the loading check
+returned before the error could ever be shown.
+
+Fixed both to actually surface what went wrong on failure instead of
+hanging silently. Checked the rest of the admin UI for the same pattern
+and found no other instances.
+
+**This was very likely surfacing a real, separate issue underneath it**:
+if the database migration adding the `admin_users` table and `owner_id`
+column hasn't been run yet on the live database, both of these screens'
+queries would fail against the old schema — which is exactly what an
+infinite, message-less "Loading…" would look like. This fix won't make
+that underlying problem go away by itself, but it will now show the
+actual error instead of hiding it, which is what's needed to confirm
+(or rule out) that as the cause.
+
+Files: `src/components/admin/QuizLibrary.tsx`,
+`src/components/admin/ManageUsers.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

@@ -13,10 +13,18 @@ export default function QuizLibrary() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/quizzes");
-    if (res.ok) {
-      const data = await res.json();
-      setQuizzes(data.quizzes);
+    try {
+      const res = await fetch("/api/quizzes");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setQuizzes(data.quizzes);
+      } else {
+        setError(data.error ?? "Could not load your quizzes.");
+        setQuizzes([]);
+      }
+    } catch {
+      setError("Network error — could not reach the server.");
+      setQuizzes([]);
     }
   }, []);
 

@@ -28,12 +28,18 @@ export default function ManageUsers() {
   const [passwordEdits, setPasswordEdits] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/admin/users");
-    if (res.ok) {
-      const data = await res.json();
-      setUsers(data.users);
-    } else {
-      setError("Could not load accounts.");
+    try {
+      const res = await fetch("/api/admin/users");
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setUsers(data.users);
+      } else {
+        setError(data.error ?? "Could not load accounts.");
+        setUsers([]);
+      }
+    } catch {
+      setError("Network error — could not reach the server.");
+      setUsers([]);
     }
   }, []);
 
