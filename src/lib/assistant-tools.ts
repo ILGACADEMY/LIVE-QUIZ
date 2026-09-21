@@ -1,6 +1,7 @@
 import "server-only";
 import { supabaseAdmin } from "./supabase/server";
 import { AdminSession } from "./admin-auth";
+import { countScoredQuestions } from "./types";
 
 /**
  * The actual data functions behind the AI Trainer Assistant. Deliberately
@@ -161,7 +162,7 @@ export async function getRecentSessions(session: AdminSession, quizId?: string, 
   const results = [];
   for (const s of sessions) {
     const { data: participants } = await supabaseAdmin.from("participants").select("base_score").eq("session_id", s.id);
-    const total = s.questions_presented ?? s.quiz_snapshot?.questions?.length ?? 0;
+    const total = s.questions_presented ?? (s.quiz_snapshot?.questions ? countScoredQuestions(s.quiz_snapshot.questions) : 0);
     const avgPercent =
       participants && participants.length > 0 && total > 0
         ? Math.round((participants.reduce((sum, p) => sum + p.base_score, 0) / participants.length / total) * 100)

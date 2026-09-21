@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { buildCertificatePdf } from "@/lib/certificate-pdf";
 
 export default function BrandingSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -12,9 +13,42 @@ export default function BrandingSettings() {
   const [certBg, setCertBg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [certBgUploading, setCertBgUploading] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const certBgInput = useRef<HTMLInputElement>(null);
+
+  // Builds a sample certificate with your current logo, wording, and
+  // background — the exact same drawing code that generates a real
+  // one, just fed a placeholder name and score — so you can see how it
+  // actually looks before anyone ever receives one. Opens a blank tab
+  // FIRST, synchronously, then fills it in once the PDF is ready —
+  // building the PDF involves awaiting image loads, and opening a new
+  // tab only after an await tends to get silently blocked as a popup
+  // by most browsers, so the tab has to already exist before that.
+  async function previewCertificate() {
+    setPreviewing(true);
+    setError(null);
+    const win = window.open("", "_blank");
+    try {
+      const doc = await buildCertificatePdf({
+        participantName: "Jane Doe",
+        quizTitle: "Sample Quiz",
+        scorePercent: 92,
+        passMarkPercent: 60,
+        completedDate: new Date(),
+        branding: { orgName, orgSubtitle, logoUrl, message: null, brandLogoUrl: null, location: location || null, backgroundUrl: certBg }
+      });
+      const blobUrl = doc.output("bloburl");
+      if (win) win.location.href = blobUrl.toString();
+      else setError("Your browser blocked the preview tab — allow pop-ups for this site and try again.");
+    } catch {
+      win?.close();
+      setError("Could not generate the preview.");
+    } finally {
+      setPreviewing(false);
+    }
+  }
 
   useEffect(() => {
     fetch("/api/admin/branding")
@@ -216,6 +250,16 @@ export default function BrandingSettings() {
             </button>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-hairline pt-5 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p className="field-label mb-1">Preview</p>
+          <p className="text-parchment/40 text-xs">See how a certificate looks with your current logo, wording, and background — with a sample name, before anyone real gets one.</p>
+        </div>
+        <button onClick={previewCertificate} disabled={previewing} className="btn-gold text-sm px-4 py-2 shrink-0">
+          {previewing ? "Building preview…" : "Preview certificate"}
+        </button>
       </div>
 
       {error && <p className="text-crimson text-sm mt-4">{error}</p>}

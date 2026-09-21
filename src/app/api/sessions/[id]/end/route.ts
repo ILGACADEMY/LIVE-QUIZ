@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
 import { recordAttemptHistory } from "@/lib/attempt-history";
+import { countScoredQuestions } from "@/lib/types";
 
 // POST /api/sessions/:id/end — "END QUIZ" (spec §23). Session data (spec
 // §35) is retained for 24h from this moment for the admin to review
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: current, error: fetchError } = await supabaseAdmin
     .from("sessions")
-    .select("status, current_question_index")
+    .select("status, current_question_index, quiz_snapshot")
     .eq("id", params.id)
     .single();
   if (fetchError || !current) return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -22,14 +23,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const endedAt = new Date();
   const deleteAt = new Date(endedAt.getTime() + 24 * 60 * 60 * 1000);
 
-  // How many questions were actually shown before this end — whether
+  // How many QUESTIONS were actually shown before this end — whether
   // that's the natural last question or a deliberate early cut-short
   // ("stop here, find a winner now"). 0 if the quiz never even started.
   // Every score/pass-fail/certificate calculation for this session uses
   // this as the denominator instead of the full deck size, so ending
   // early doesn't silently divide everyone's score by questions they
-  // never had a chance to answer.
-  const questionsPresented = current.status === "live" ? current.current_question_index + 1 : 0;
+  // never had a chance to answer. Deliberately counts only item_type
+  // 'question' entries among what was shown — an info page shown along
+  // the way is not a question and must never inflate this denominator.
+  const itemsShown = current.status === "live" ? current.quiz_snapshot.questions.slice(0, current.current_question_index + 1) : [];
+  const questionsPresented = countScoredQuestions(itemsShown);
 
   const { data: session, error } = await supabaseAdmin
     .from("sessions")

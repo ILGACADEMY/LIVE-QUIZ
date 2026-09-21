@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { LiveSession } from "@/lib/types";
+import { LiveSession, countScoredQuestions } from "@/lib/types";
 
 // GET /api/sessions/:id/certificate?participantId=X
 //
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const quiz = session.quiz_snapshot.quiz;
-  const totalQuestions = session.questions_presented ?? session.quiz_snapshot.questions.length;
+  const totalQuestions = session.questions_presented ?? countScoredQuestions(session.quiz_snapshot.questions);
 
   if (!quiz.issue_certificate) {
     return NextResponse.json({ eligible: false, reason: "not_enabled" });

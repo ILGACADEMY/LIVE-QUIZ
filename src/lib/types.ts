@@ -31,10 +31,21 @@ export interface Quiz {
   updated_at: string;
 }
 
+export type PageBlockSize = "normal" | "large" | "xlarge";
+
+export interface PageBlock {
+  text: string;
+  size: PageBlockSize;
+  highlighted: boolean;
+}
+
+export type QuizItemType = "question" | "info_page";
+
 export interface Question {
   id: string;
   quiz_id: string;
   order_index: number;
+  item_type: QuizItemType;
   question_text: string;
   image_url: string | null;
   media_type: "image" | "video";
@@ -51,11 +62,19 @@ export interface Question {
   category: string;
   difficulty: Difficulty;
   learning_topic: string;
+  // Only meaningful when item_type is 'info_page' — the page's own
+  // formatted content, a heading (reusing question_text) plus an
+  // ordered list of text blocks. Every field above this comment stays
+  // present but unused/empty for an info page, rather than splitting
+  // into a separate type — simpler to thread through the many existing
+  // places that already assume every item has this shape.
+  page_blocks: PageBlock[] | null;
 }
 
 /** Question shape safe to send to a participant's browser — no answer key. */
 export interface PublicQuestion {
   index: number;
+  item_type: QuizItemType;
   question_text: string;
   image_url: string | null;
   media_type: "image" | "video";
@@ -65,6 +84,7 @@ export interface PublicQuestion {
   option_d: string;
   category: string;
   difficulty: Difficulty;
+  page_blocks: PageBlock[] | null;
 }
 
 export interface QuizSnapshot {
@@ -133,4 +153,16 @@ export interface LeaderboardRow {
   name: string;
   score: number;
   time_seconds: number | null;
+}
+
+// The single, shared definition of "how many questions were there" —
+// used everywhere a total-questions count feeds into a score
+// percentage, a leaderboard denominator, or a progress display. An
+// info page is never a question and must never be counted as one here
+// — every place that computes a score-related total does so through
+// this one function, rather than each computing its own raw
+// .length, specifically so there's only one place this logic can go
+// wrong instead of a dozen slightly-different copies of it.
+export function countScoredQuestions(items: { item_type?: QuizItemType }[]): number {
+  return items.filter((i) => i.item_type !== "info_page").length;
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { LiveSession, PublicQuestion } from "@/lib/types";
+import { LiveSession, PublicQuestion, countScoredQuestions } from "@/lib/types";
 import { translateQuestion, translateBullets } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
 import { broadcastSessionEvent } from "@/lib/realtime";
@@ -11,6 +11,7 @@ function toPublicQuestion(session: LiveSession, index: number): PublicQuestion |
   if (!q) return null;
   return {
     index,
+    item_type: q.item_type ?? "question",
     question_text: q.question_text,
     image_url: q.image_url,
     media_type: q.media_type ?? "image",
@@ -19,7 +20,8 @@ function toPublicQuestion(session: LiveSession, index: number): PublicQuestion |
     option_c: q.option_c,
     option_d: q.option_d,
     category: q.category,
-    difficulty: q.difficulty
+    difficulty: q.difficulty,
+    page_blocks: q.page_blocks ?? null
   };
 }
 
@@ -33,8 +35,11 @@ async function toLocalizedQuestion(session: LiveSession, index: number, language
   // participant row somehow has a non-English language stored (e.g. the
   // quiz's translation setting was switched off after they joined), this
   // is what actually prevents any Claude API call — the real place the
-  // cost would be incurred.
-  if (!base || language === "en" || !session.quiz_snapshot.quiz.translation_enabled) return base;
+  // cost would be incurred. An info page is never translated at all —
+  // it has no question_text/options in the sense this function
+  // translates, so there's nothing meaningful to send, and doing so
+  // would just be a wasted API call.
+  if (!base || base.item_type === "info_page" || language === "en" || !session.quiz_snapshot.quiz.translation_enabled) return base;
 
   const { data: cached } = await supabaseAdmin
     .from("question_translations")
@@ -114,7 +119,9 @@ async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
         ended_at: endedAt.toISOString(),
         delete_at: deleteAt.toISOString(),
         phase_deadline: null,
-        questions_presented: session.current_question_index + 1
+        // Same rule as the manual /end route: count only actual
+        // questions among what's been shown, never info pages.
+        questions_presented: countScoredQuestions(session.quiz_snapshot.questions.slice(0, session.current_question_index + 1))
       })
       .eq("id", session.id)
       .eq("phase", "revealed") // guards against racing with a presenter's manual click
@@ -188,7 +195,10 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (error || !rawSession) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
   const session = await selfHealPhase(rawSession);
-  const totalQuestions = session.quiz_snapshot.questions.length;
+  // Used for participant-facing display (the waiting-room description,
+  // "Question X of N" progress) — deliberately excludes info pages,
+  // since they're never a "question" and shouldn't inflate this count.
+  const totalQuestions = countScoredQuestions(session.quiz_snapshot.questions);
 
   if (!participantId) {
     const [{ count: joined }, { count: completed }, { count: answeredForCurrent }] = await Promise.all([

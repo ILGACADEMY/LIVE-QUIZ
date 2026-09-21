@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { LiveSession } from "@/lib/types";
+import { LiveSession, countScoredQuestions } from "@/lib/types";
 import { translateQuestion } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
 import { getPreviousAttempt } from "@/lib/attempt-history";
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // silently divide everyone's score by questions they never had a
   // chance to see. Falls back to the full deck length only for a
   // session finished before this column existed.
-  const totalQuestions = session.questions_presented ?? session.quiz_snapshot.questions.length;
+  const totalQuestions = session.questions_presented ?? countScoredQuestions(session.quiz_snapshot.questions);
   const correctCount = answers.filter((a) => a.is_correct).length;
   const percentage = Math.round((correctCount / totalQuestions) * 100);
   const passed = percentage >= quiz.pass_mark_percent;

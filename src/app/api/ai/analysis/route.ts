@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { generateLearningProfile, generateQuizPerformanceAnalysis } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
-import { LiveSession } from "@/lib/types";
+import { LiveSession, countScoredQuestions } from "@/lib/types";
 
 // POST /api/ai/analysis — { type: "profile", sessionId, participantId }
 //                       — { type: "admin", sessionId }  (requires admin auth)
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ analysis: "Not enough responses yet to generate an analysis — at least one participant needs to have answered at least one question." });
     }
 
-    const totalQuestions = session.questions_presented ?? session.quiz_snapshot.questions.length;
+    const totalQuestions = session.questions_presented ?? countScoredQuestions(session.quiz_snapshot.questions);
     const averageScorePercent = Math.round(
       (participants.reduce((sum, p) => sum + (p.base_score / totalQuestions) * 100, 0) / participants.length)
     );

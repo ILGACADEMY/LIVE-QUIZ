@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
-import { LiveSession } from "@/lib/types";
+import { LiveSession, countScoredQuestions } from "@/lib/types";
 
 const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d" } as const;
 
@@ -49,7 +49,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if (sessionError || !session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
 
   const quiz = session.quiz_snapshot.quiz;
-  const totalQuestions = session.quiz_snapshot.questions.length;
+  // Same rule as results/leaderboard/certificate: use questions_presented
+  // when the session set it (correct for an early-ended quiz), otherwise
+  // count only actual questions in the full deck — an info page shown
+  // along the way must never be counted toward this denominator.
+  const totalQuestions = session.questions_presented ?? countScoredQuestions(session.quiz_snapshot.questions);
   const safeTitle = quiz.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
 
   const { data: participants, error: pError } = await supabaseAdmin

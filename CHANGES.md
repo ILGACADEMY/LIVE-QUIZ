@@ -2115,6 +2115,89 @@ actual error instead of hiding it, which is what's needed to confirm
 Files: `src/components/admin/QuizLibrary.tsx`,
 `src/components/admin/ManageUsers.tsx`.
 
+## 80. Certificate preview — see it before anyone real gets one
+
+Added a "Preview certificate" button in Branding settings. Click it,
+and it opens a certificate in a new tab using your current logo,
+wording, and background — with a sample name and score standing in for
+a real participant — so you can actually see the result before
+publishing anything.
+
+**How this stays trustworthy rather than becoming a second, drifting
+copy**: extracted the certificate's actual drawing logic out of the
+participant results page into a shared module
+(`src/lib/certificate-pdf.ts`) that both the real certificate and this
+preview now call. There's only one version of this code — a preview
+can never show something different from what a real participant
+actually receives, because it's the exact same function drawing both.
+
+**A real, if small, correctness fix found along the way**: the initial
+attempt used a type cast that papered over jsPDF's actual return type
+for opening the preview in a new tab, which happened to still work at
+runtime through JavaScript's implicit string coercion — but that's
+exactly the kind of "probably fine" shortcut worth not leaving in
+place. Checked jsPDF's real type definitions and fixed it to handle
+the actual returned type properly instead. Also verified the core
+drawing logic with an actual runtime test (not just a type-check),
+confirming it produces valid, correctly-sized PDF output.
+
+The popup-blocker-safe pattern used here (open a blank tab
+synchronously, fill it in once the async PDF is ready) is worth
+remembering for any future "generate then show" feature — most
+browsers silently block a new tab opened after an `await`.
+
+Files: `src/lib/certificate-pdf.ts` (new),
+`src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/BrandingSettings.tsx`.
+
+## 81. Content pages (info slides) — backend groundwork, not yet usable
+
+First half of a bigger feature: the ability to insert a non-question
+"page" into a quiz — an optional image plus formatted text blocks
+(bigger size, highlighted) — shown live during a session like a slide,
+to further explain something, with no answer required and never
+scored. This is genuinely one of the larger single changes in this
+project, since it touches the live session engine directly, so it's
+being built in two deliberate stages rather than all at once.
+
+**This stage is backend-only and carries zero risk to anything
+existing.** No database migration was made — the schema hasn't been
+touched yet. Every new code path defensively treats anything without
+the new field as an ordinary question, so existing quizzes are
+byte-for-byte unaffected. Nothing about this stage is visible or
+different to use yet; it exists purely so the next stage (the actual
+editor UI and live rendering) has a correct, tested foundation under it.
+
+**What was audited and fixed, methodically, before touching anything
+UI-facing**: every single place in the backend that computes a score
+percentage, a leaderboard position, or a "how many questions" total —
+about a dozen separate spots across results, leaderboard,
+certificates, CSV export, AI group analysis, and the Trainer
+Assistant — now correctly excludes a future info page from that count,
+through one single shared, tested function rather than a dozen
+separately-written fixes that could quietly drift apart. Also fixed
+how the "Next" button behaves for a page (skips straight past it —
+there's nothing to reveal), and confirmed the existing auto-reveal
+timer logic needs zero changes, since a page with no timer and no
+possible answers is already naturally inert against it.
+
+**A genuine pre-existing bug found along the way, unrelated to info
+pages**: the CSV results export wasn't using the "questions actually
+shown" correction for an early-ended quiz that results, leaderboard,
+and certificates already had — so an early-ended session's exported
+percentages could have been divided by the full deck size instead of
+what was actually shown. Fixed to match the others.
+
+Files: `src/lib/types.ts`, `src/app/api/sessions/[id]/advance/route.ts`,
+`src/app/api/sessions/[id]/answer/route.ts`,
+`src/app/api/sessions/[id]/state/route.ts`,
+`src/app/api/sessions/[id]/end/route.ts`,
+`src/app/api/sessions/[id]/results/route.ts`,
+`src/app/api/sessions/[id]/leaderboard/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/app/api/sessions/[id]/export/route.ts`,
+`src/app/api/ai/analysis/route.ts`, `src/lib/assistant-tools.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

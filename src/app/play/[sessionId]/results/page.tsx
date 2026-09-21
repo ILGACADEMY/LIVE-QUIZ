@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
+import { buildCertificatePdf, safeFilename } from "@/lib/certificate-pdf";
 import ScoreCircle from "@/components/participant/ScoreCircle";
 import RadarChart from "@/components/shared/RadarChart";
 
@@ -253,245 +254,22 @@ export default function ResultsPage({
   // real completion timestamp, never today's date or the quiz's
   // creation date.
   // Loads a remote image (the uploaded logo) as a data URL jsPDF can
-  // actually embed — addImage() needs base64 data or an HTMLImageElement,
-  // not a plain URL, since the PDF is a self-contained file with no
-  // network access of its own once downloaded.
-  async function loadImageAsDataUrl(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
-    try {
-      const res = await fetch(url);
-      const blob = await res.blob();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      });
-      const dims = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
-        img.onerror = reject;
-        img.src = dataUrl;
-      });
-      return { dataUrl, ...dims };
-    } catch {
-      return null;
-    }
-  }
-
+  // actually embed — see src/lib/certificate-pdf.ts, which now owns
+  // this and the rest of the certificate's drawing logic, so a preview
+  // built from Branding settings can never drift out of sync with what
+  // a real participant actually receives.
   async function downloadCertificate() {
     if (!certificate || !data) return;
-    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const centerX = pageWidth / 2;
-    const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl, location, backgroundUrl } = certificate.branding;
     const completedDate = data.completedAt ? new Date(data.completedAt) : new Date(certificate.issuedAt);
-    const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-
-    function centered(text: string, y: number, opts: { size?: number; bold?: boolean; italic?: boolean; color?: [number, number, number]; tracked?: boolean } = {}) {
-      const { size = 12, bold = false, italic = false, color = [30, 30, 30], tracked = false } = opts;
-      doc.setFont("helvetica", italic ? "italic" : bold ? "bold" : "normal");
-      doc.setFontSize(size);
-      doc.setTextColor(color[0], color[1], color[2]);
-      // A simple letter-spacing approximation for the small caps headings
-      // in the reference design — jsPDF's core fonts have no native
-      // tracking control, so this spells the text out with extra spaces
-      // between characters rather than using a real kerning API.
-      const rendered = tracked ? text.split("").join("\u2009") : text;
-      doc.text(rendered, centerX, y, { align: "center" });
-    }
-
-    // Custom per-quiz achievement wording if the admin set one (with
-    // {name}/{score} placeholders filled in) always wins as-is. Otherwise,
-    // the default depends on whether this is a participation certificate
-    // (pass mark set to 0% -- everyone who takes it gets one) or a real
-    // achievement one: a participation certificate's default wording
-    // deliberately never mentions a score, since the whole point of
-    // issuing one to everyone is that the score isn't the qualifying
-    // factor here.
-    const isParticipationCertificate = data.passMarkPercent === 0;
-    const defaultAchievementText = isParticipationCertificate
-      ? `En reconnaissance de sa participation au programme ${orgName} ${orgSubtitle}.`
-      : `En reconnaissance de la r\u00e9ussite du programme ${orgName} ${orgSubtitle}, avec un score de {score}%.`;
-    const achievementText = (message || defaultAchievementText)
-      .replace(/\{name\}/gi, certificate.participantName)
-      .replace(/\{score\}/gi, String(certificate.scorePercent));
-
-    // ---- Path A: a fully custom uploaded background image ----
-    // Text is overlaid at fixed positions matching the reference layout's
-    // proportions (name centered mid-page, achievement text below it,
-    // date/signature near the bottom) -- this is necessarily approximate
-    // for an arbitrary uploaded design, since there's no way to know
-    // exactly where blank areas were left on a custom template. Best
-    // suited to a background built to roughly this same layout.
-    if (backgroundUrl) {
-      const bg = await loadImageAsDataUrl(backgroundUrl);
-      if (bg) {
-        doc.addImage(bg.dataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
-      }
-      centered(certificate.quizTitle.toUpperCase(), pageHeight * 0.32, { size: 22, bold: true, color: [140, 30, 30] });
-      centered(certificate.participantName, pageHeight * 0.46, { size: 22, bold: true, color: [40, 40, 40] });
-      const lines = doc.splitTextToSize(achievementText, pageWidth * 0.55) as string[];
-      let ly = pageHeight * 0.58;
-      lines.forEach((line) => {
-        centered(line, ly, { size: 10.5, color: [80, 80, 80] });
-        ly += 14;
-      });
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(80, 80, 80);
-      doc.text(completedDate.toLocaleDateString(), pageWidth * 0.28, pageHeight * 0.88, { align: "center" });
-      doc.save(`Meridian_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
-      return;
-    }
-
-    // ---- Path B: the built-in drawn layout ----
-    // A red double-line border frame, matching the reference's red
-    // border rather than the previous version's gold one.
-    doc.setDrawColor(140, 30, 30);
-    doc.setLineWidth(3);
-    doc.rect(20, 20, pageWidth - 40, pageHeight - 40);
-    doc.setLineWidth(1);
-    doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
-
-    let y = 75;
-
-    // Company logo, and — for a brand-specific quiz — that quiz's own
-    // brand logo alongside it (e.g. Cerruti 1881, Palm Angels). With
-    // only a company logo, it's centered; with both, they sit side by
-    // side, each fit within its own box, aspect ratio always preserved.
-    const companyLogo = logoUrl ? await loadImageAsDataUrl(logoUrl) : null;
-    const brandLogo = brandLogoUrl ? await loadImageAsDataUrl(brandLogoUrl) : null;
-    if (companyLogo || brandLogo) {
-      const maxW = 90;
-      const maxH = 38;
-      const gap = 24;
-      function fitted(logo: { dataUrl: string; width: number; height: number }) {
-        const scale = Math.min(maxW / logo.width, maxH / logo.height);
-        return { w: logo.width * scale, h: logo.height * scale };
-      }
-      if (companyLogo && brandLogo) {
-        const c = fitted(companyLogo);
-        const b = fitted(brandLogo);
-        const totalW = c.w + gap + b.w;
-        const startX = centerX - totalW / 2;
-        doc.addImage(companyLogo.dataUrl, startX, y - c.h, c.w, c.h);
-        doc.addImage(brandLogo.dataUrl, startX + c.w + gap, y - b.h, b.w, b.h);
-        y += 20;
-      } else {
-        const logo = (companyLogo ?? brandLogo)!;
-        const f = fitted(logo);
-        doc.addImage(logo.dataUrl, centerX - f.w / 2, y - f.h, f.w, f.h);
-        y += 20;
-      }
-    }
-
-    // Stacked text header — org name large with a short red underline
-    // accent beneath it, subtitle smaller below, matching the reference
-    // design's two-tier treatment regardless of the exact words
-    // configured in Branding settings.
-    centered(orgName, y, { size: 22, bold: true, color: [90, 95, 105] });
-    doc.setDrawColor(140, 30, 30);
-    doc.setLineWidth(1.5);
-    doc.line(centerX - 55, y + 8, centerX + 55, y + 8);
-    y += 34;
-    centered(orgSubtitle, y, { size: 13, color: [90, 95, 105], tracked: true });
-    y += 55;
-
-    centered("CERTIFI\u00c9", y, { size: 15, color: [90, 95, 105], tracked: true });
-    y += 40;
-    centered(certificate.quizTitle.toUpperCase(), y, { size: 26, bold: true, color: [140, 30, 30] });
-    y += 34;
-    centered("D\u00c9CERN\u00c9 \u00c0", y, { size: 12, color: [60, 60, 60], tracked: true });
-    y += 45;
-
-    centered(certificate.participantName, y, { size: 22, bold: true, color: [40, 40, 40] });
-    y += 8;
-    doc.setDrawColor(150, 150, 150);
-    doc.setLineWidth(0.75);
-    doc.line(centerX - 160, y, centerX + 160, y);
-    y += 34;
-
-    const achievementLines = doc.splitTextToSize(achievementText.toUpperCase(), pageWidth - 260) as string[];
-    achievementLines.forEach((line) => {
-      centered(line, y, { size: 11, color: [50, 50, 50] });
-      y += 16;
+    const doc = await buildCertificatePdf({
+      participantName: certificate.participantName,
+      quizTitle: certificate.quizTitle,
+      scorePercent: certificate.scorePercent,
+      passMarkPercent: data.passMarkPercent,
+      completedDate,
+      branding: certificate.branding
     });
-    y += 20;
-
-    // A simple decorative watch-dial motif -- concentric circles and
-    // hour ticks in a faint tone, evoking a chronograph face the way
-    // the reference does, without attempting to recreate its detailed
-    // illustration exactly.
-    const dialCenterY = y + 55;
-    doc.setDrawColor(225, 205, 205);
-    doc.setLineWidth(1);
-    doc.circle(centerX, dialCenterY, 58, "S");
-    doc.circle(centerX, dialCenterY, 48, "S");
-    for (let i = 0; i < 12; i++) {
-      const angle = (i * 30 * Math.PI) / 180;
-      const x1 = centerX + 52 * Math.sin(angle);
-      const y1 = dialCenterY - 52 * Math.cos(angle);
-      const x2 = centerX + 58 * Math.sin(angle);
-      const y2 = dialCenterY - 58 * Math.cos(angle);
-      doc.line(x1, y1, x2, y2);
-    }
-    y = dialCenterY + 70;
-
-    // A simple wax-seal approximation: a filled dark red circle with a
-    // lighter ring and the organization's initials inside. Not a real
-    // wax texture -- that needs an actual image asset (see the
-    // certificate background upload option in Branding settings for a
-    // fully custom design instead).
-    const sealY = y + 26;
-    doc.setFillColor(120, 20, 25);
-    doc.circle(centerX, sealY, 24, "F");
-    doc.setDrawColor(160, 60, 60);
-    doc.setLineWidth(1);
-    doc.circle(centerX, sealY, 18, "S");
-    const initials = orgName
-      .split(/\s+/)
-      .map((w) => w[0])
-      .join("")
-      .slice(0, 3)
-      .toUpperCase();
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(190, 140, 140);
-    doc.text(initials, centerX, sealY + 4, { align: "center" });
-    y = sealY + 50;
-
-    if (location) {
-      centered(location.toUpperCase(), y, { size: 8.5, color: [90, 90, 90] });
-      y += 12;
-    }
-
-    // Footer: date (left) and a signature line (right) -- a simple
-    // placeholder flourish stands in for a real signature for now,
-    // easy to swap for a scanned one via the certificate background
-    // upload option once you have one.
-    const footerY = pageHeight - 55;
-    doc.setDrawColor(90, 90, 90);
-    doc.setLineWidth(0.75);
-    doc.line(70, footerY, 230, footerY);
-    doc.line(pageWidth - 230, footerY, pageWidth - 70, footerY);
-
-    doc.setFont("helvetica", "italic");
-    doc.setFontSize(16);
-    doc.setTextColor(60, 60, 90);
-    doc.text("A.", pageWidth - 190, footerY - 10);
-    doc.setLineWidth(1);
-    doc.line(pageWidth - 175, footerY - 14, pageWidth - 150, footerY - 20);
-    doc.line(pageWidth - 150, footerY - 20, pageWidth - 120, footerY - 8);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(90, 90, 90);
-    doc.text(completedDate.toLocaleDateString("fr-FR"), 150, footerY + 14, { align: "center" });
-    doc.text("DATE", 150, footerY + 26, { align: "center" });
-    doc.text("DIRECTEUR ACADÉMIQUE", pageWidth - 150, footerY + 26, { align: "center" });
-
-    doc.save(`Meridian_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
+    doc.save(`Meridian_Certificate_${safeFilename(certificate.participantName)}_${safeFilename(certificate.quizTitle)}.pdf`);
   }
 
   if (error) {

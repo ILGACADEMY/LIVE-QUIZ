@@ -9,19 +9,29 @@ import { LiveSession } from "@/lib/types";
 //
 // The presenter's single "Next" control. What it does depends on the
 // session's current phase — this is a deliberate two-click pattern
-// (reveal, then advance), matching how Kahoot/Menti-style tools behave
-// and giving the room a clear moment to see the answer before moving on:
+// (reveal, then advance) for a QUESTION, matching how Kahoot/Menti-style
+// tools behave and giving the room a clear moment to see the answer
+// before moving on:
 //
 //   phase === 'question' → reveal now (cuts the timer short if it hasn't
 //                           expired yet; harmless no-op if it already has,
 //                           since the state route auto-reveals on timeout)
-//   phase === 'revealed' → advance to the next question (or finish the
+//   phase === 'revealed' → advance to the next item (or finish the
 //                           quiz if that was the last one)
 //
+// An INFO PAGE (item_type 'info_page') is different — there's no
+// correct answer to reveal, so its "Next" click goes straight from
+// 'question' phase to the next item in one step, reusing the exact same
+// move-to-next-item logic a question's second click uses. It also never
+// gets a phase_deadline (see moveToNextItem below), so the self-healing
+// auto-reveal check in the state route naturally never fires for it —
+// nothing there needed to change to make that true.
+//
 // This never runs on a timer by itself — only ever in response to a
-// presenter clicking the button, or (for the question → revealed step
-// only) automatically once the per-question deadline passes, handled by
-// the self-healing check in the state route rather than here.
+// presenter clicking the button, or (for a question's question →
+// revealed step only) automatically once the per-question deadline
+// passes, handled by the self-healing check in the state route rather
+// than here.
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -38,38 +48,17 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "This quiz is not currently live." }, { status: 409 });
   }
 
-  if (session.phase === "question") {
-    const { error } = await supabaseAdmin
-      .from("sessions")
-      .update({ phase: "revealed", phase_deadline: null })
-      .eq("id", params.id)
-      .eq("phase", "question"); // guards against a double-click race
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  // Shared by both "revealed → next" (a question's second click) and
+  // "question → next" (an info page's only click) — moves to the next
+  // item, or finishes the quiz if there wasn't one. Kept as one function
+  // so there's a single place this logic lives, not two copies that
+  // could quietly drift apart.
+  async function moveToNextItem(fromPhase: "question" | "revealed") {
+    const items = session!.quiz_snapshot.questions;
+    const totalItems = items.length;
+    const nextIndex = session!.current_question_index + 1;
 
-    // Pre-translate the NEXT question now, while the room is looking at
-    // this reveal screen — not later, during the next question's timed,
-    // scored window. This is the fix for translated participants
-    // effectively losing several seconds of their answering time to a
-    // live translation call: by the time "Next question" gets clicked,
-    // the cache is already warm. Only adds latency to THIS "Reveal
-    // answer" click (a presenter action, never scored), and only the
-    // first time each language needs this particular question.
-    const nextIndex = session.current_question_index + 1;
-    if (session.quiz_snapshot.quiz.translation_enabled && nextIndex < session.quiz_snapshot.questions.length) {
-      await preWarmQuestionTranslations(params.id, nextIndex, session.quiz_snapshot.questions[nextIndex]);
-    }
-
-    await broadcastSessionEvent(params.id, "question_revealed", {
-      questionIndex: session.current_question_index
-    });
-    return NextResponse.json({ phase: "revealed" });
-  }
-
-  if (session.phase === "revealed") {
-    const totalQuestions = session.quiz_snapshot.questions.length;
-    const nextIndex = session.current_question_index + 1;
-
-    if (nextIndex >= totalQuestions) {
+    if (nextIndex >= totalItems) {
       const endedAt = new Date();
       const deleteAt = new Date(endedAt.getTime() + 24 * 60 * 60 * 1000);
 
@@ -79,10 +68,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         .eq("id", params.id);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-      // Presenter-driven completion (unlike the old self-paced model)
-      // means participants don't individually set their own completed_at
-      // as they finish — mark everyone who hasn't already been marked
-      // (e.g. by the manual /end route) complete now, all at once.
       await supabaseAdmin
         .from("participants")
         .update({ completed_at: endedAt.toISOString() })
@@ -93,19 +78,27 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ phase: "finished" });
     }
 
-    // A short shared countdown before the question actually starts —
+    const nextItem = items[nextIndex];
+    const nextIsInfoPage = nextItem.item_type === "info_page";
+
+    // A short shared countdown before the item actually appears —
     // matches the 3-2-1 the room already sees at the very beginning of
-    // the quiz, now repeated between every question so it's a consistent
-    // ritual, not just a one-time opener. current_question_started_at
-    // (and therefore the timer deadline) is set N seconds in the future;
-    // participants show a local countdown until that moment arrives
-    // rather than seeing the question the instant the presenter clicks.
-    // Longer (6s vs 3s) when translation is on — extra safety margin on
-    // top of the pre-warming above, not the primary fix for it.
-    const COUNTDOWN_MS = (session.quiz_snapshot.quiz.translation_enabled ? 6 : 3) * 1000;
+    // the quiz, kept consistent whether the next item is a question or
+    // an info page. Longer (6s vs 3s) when translation is on for a
+    // question — an info page has no answer text to translate ahead of
+    // time in the same way, so it always uses the shorter countdown.
+    const COUNTDOWN_MS = (!nextIsInfoPage && session!.quiz_snapshot.quiz.translation_enabled ? 6 : 3) * 1000;
     const startedAt = new Date(Date.now() + COUNTDOWN_MS);
-    const questionTimerSeconds = session.quiz_snapshot.quiz.question_timer_seconds ?? 20;
-    const deadline = new Date(startedAt.getTime() + questionTimerSeconds * 1000);
+    // An info page never gets a phase_deadline — no auto-timer, no
+    // auto-reveal-on-timeout; the presenter reads it and advances
+    // whenever they're ready. This single null is what keeps the
+    // self-healing check in the state route naturally inert for it.
+    const questionTimerSeconds = session!.quiz_snapshot.quiz.question_timer_seconds ?? 20;
+    const deadline = nextIsInfoPage ? null : new Date(startedAt.getTime() + questionTimerSeconds * 1000);
+
+    if (!nextIsInfoPage && session!.quiz_snapshot.quiz.translation_enabled) {
+      await preWarmQuestionTranslations(params.id, nextIndex, nextItem);
+    }
 
     const { error } = await supabaseAdmin
       .from("sessions")
@@ -113,10 +106,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         current_question_index: nextIndex,
         current_question_started_at: startedAt.toISOString(),
         phase: "question",
-        phase_deadline: deadline.toISOString()
+        phase_deadline: deadline ? deadline.toISOString() : null
       })
       .eq("id", params.id)
-      .eq("phase", "revealed"); // guards against a double-click race
+      .eq("phase", fromPhase); // guards against a double-click race
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     await broadcastSessionEvent(params.id, "question_advanced", {
@@ -124,6 +117,39 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       startsAt: startedAt.toISOString()
     });
     return NextResponse.json({ phase: "question", questionIndex: nextIndex });
+  }
+
+  if (session.phase === "question") {
+    const currentItem = session.quiz_snapshot.questions[session.current_question_index];
+    if (currentItem.item_type === "info_page") {
+      return moveToNextItem("question");
+    }
+
+    const { error } = await supabaseAdmin
+      .from("sessions")
+      .update({ phase: "revealed", phase_deadline: null })
+      .eq("id", params.id)
+      .eq("phase", "question"); // guards against a double-click race
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const nextIndex = session.current_question_index + 1;
+    const nextItem = session.quiz_snapshot.questions[nextIndex];
+    if (
+      session.quiz_snapshot.quiz.translation_enabled &&
+      nextIndex < session.quiz_snapshot.questions.length &&
+      nextItem.item_type !== "info_page"
+    ) {
+      await preWarmQuestionTranslations(params.id, nextIndex, nextItem);
+    }
+
+    await broadcastSessionEvent(params.id, "question_revealed", {
+      questionIndex: session.current_question_index
+    });
+    return NextResponse.json({ phase: "revealed" });
+  }
+
+  if (session.phase === "revealed") {
+    return moveToNextItem("revealed");
   }
 
   return NextResponse.json({ error: `Cannot advance from phase '${session.phase}'.` }, { status: 409 });

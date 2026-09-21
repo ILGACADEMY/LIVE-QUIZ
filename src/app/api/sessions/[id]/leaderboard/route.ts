@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { countScoredQuestions } from "@/lib/types";
 
 // GET /api/sessions/:id/leaderboard[?participantId=...][?admin=1][?view=top10|byCity|byStore]
 //
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // were actually presented in this session, not the full quiz
   // template's length, so ending early doesn't divide everyone's score
   // by questions they never had a chance to answer.
-  const totalQuestions = session?.questions_presented ?? session?.quiz_snapshot?.questions?.length ?? 0;
+  const totalQuestions = session?.questions_presented ?? (session?.quiz_snapshot?.questions ? countScoredQuestions(session.quiz_snapshot.questions) : 0);
 
   const { data: allJoined, error: joinedError } = await supabaseAdmin
     .from("participants")

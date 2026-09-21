@@ -35,6 +35,14 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (session.phase !== "question" || session.current_question_index !== questionIndex) {
     return NextResponse.json({ error: "This question is no longer active." }, { status: 409 });
   }
+  // Defense in depth: an info page has no correct answer and the
+  // participant's own screen never shows answer buttons for one, but a
+  // stray or malformed request could still name its index — reject it
+  // outright rather than silently scoring something that isn't a
+  // question at all.
+  if (session.quiz_snapshot.questions[questionIndex]?.item_type === "info_page") {
+    return NextResponse.json({ error: "This item isn't a question." }, { status: 409 });
+  }
   if (session.phase_deadline && receivedAt > new Date(session.phase_deadline).getTime()) {
     return NextResponse.json({ error: "Time is up for this question." }, { status: 409 });
   }
