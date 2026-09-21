@@ -3,7 +3,7 @@ import Link from "next/link";
 export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
-      <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-4">ILG ACADEMY</p>
+      <p className="text-gold text-xs tracking-[0.2em] font-body font-medium mb-4">MERIDIAN</p>
       <h1 className="font-display text-4xl md:text-6xl text-ivory italic mb-6 max-w-2xl">
         The live quiz engine for the sales floor
       </h1>

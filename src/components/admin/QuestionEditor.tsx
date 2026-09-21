@@ -90,7 +90,34 @@ export default function QuestionEditor({
   const [spellError, setSpellError] = useState<string | null>(null);
   const [suggestingFeedback, setSuggestingFeedback] = useState<Record<string, boolean>>({});
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [describing, setDescribing] = useState(false);
+  const [imageDescription, setImageDescription] = useState<string | null>(null);
+  const [describeError, setDescribeError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  async function handleDescribeImage() {
+    if (!question.image_url) return;
+    setDescribing(true);
+    setDescribeError(null);
+    setImageDescription(null);
+    try {
+      const res = await fetch("/api/ai/describe-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: question.image_url })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDescribeError(data.error ?? "Could not analyze that image.");
+        return;
+      }
+      setImageDescription(data.description);
+    } catch {
+      setDescribeError("Network error — the request never reached the server.");
+    } finally {
+      setDescribing(false);
+    }
+  }
 
   function set<K extends keyof EditableQuestion>(key: K, value: EditableQuestion[K]) {
     onChange({ ...question, [key]: value });
@@ -254,6 +281,8 @@ export default function QuestionEditor({
       const mediaType = signData.mediaType ?? (isVideo ? "video" : "image");
       set("image_url", signData.publicUrl);
       set("media_type", mediaType);
+      setImageDescription(null);
+      setDescribeError(null);
       // Persisted immediately, not left for a separate manual Save click
       // to remember — passing the merged object and this question's own
       // index explicitly (both captured in this closure, from the
@@ -400,14 +429,35 @@ export default function QuestionEditor({
                   onClick={() => {
                     set("image_url", null);
                     set("media_type", "image");
+                    setImageDescription(null);
+                    setDescribeError(null);
                   }}
                   className="text-xs text-crimson/80 hover:text-crimson text-left"
                 >
                   Remove
                 </button>
               )}
+              {question.image_url && question.media_type !== "video" && (
+                <button type="button" onClick={handleDescribeImage} disabled={describing} className="text-xs text-gold/80 hover:text-gold text-left">
+                  {describing ? "Looking at the image…" : "AI: Describe this image"}
+                </button>
+              )}
             </div>
           </div>
+          {imageDescription && (
+            <div className="border border-hairline bg-black/10 px-3 py-2.5 mb-3">
+              <p className="text-parchment/40 text-[11px] mb-1">
+                What's visible in the photo — not a model or spec identification, which AI can't reliably do from an image alone:
+              </p>
+              <p className="text-sm text-parchment/80">{imageDescription}</p>
+            </div>
+          )}
+          {describeError && (
+            <div className="border border-crimson/50 bg-crimson/10 px-3 py-2.5 mb-3 flex items-start gap-2">
+              <span className="text-crimson text-sm shrink-0">⚠</span>
+              <p className="text-sm text-crimson/90">{describeError}</p>
+            </div>
+          )}
           {uploadError && (
             <div className="border border-crimson/50 bg-crimson/10 px-3 py-2.5 mb-3 flex items-start gap-2">
               <span className="text-crimson text-sm shrink-0">⚠</span>

@@ -320,3 +320,54 @@ export async function suggestWrongAnswerFeedback(params: {
   });
   return extractText(msg).trim().replace(/^"|"$/g, "");
 }
+
+/**
+ * Describes what's visually present in a question's uploaded image —
+ * case shape, dial color, visible complications, strap material, that
+ * kind of thing. Deliberately does NOT attempt to identify a specific
+ * brand, model, or reference number, and does not state exact specs
+ * (water resistance rating, movement caliber, etc.) that can't actually
+ * be seen in a photo. For a niche, private-label product like ILG's own
+ * watch brands, Claude has essentially never seen that specific model
+ * during training — a confident-sounding "this is the XYZ with 100m
+ * water resistance" would very often just be a plausible-sounding guess,
+ * and wrong specs stated with confidence are exactly the kind of thing
+ * that shouldn't end up in training content. This only reports what a
+ * human could also see by looking at the photo themselves.
+ */
+export async function describeQuestionImage(imageUrl: string): Promise<string> {
+  const imageRes = await fetch(imageUrl);
+  if (!imageRes.ok) throw new Error("Could not download the image to analyze it.");
+  const contentType = imageRes.headers.get("content-type") ?? "image/jpeg";
+  const mediaType = (["image/jpeg", "image/png", "image/gif", "image/webp"].includes(contentType) ? contentType : "image/jpeg") as
+    | "image/jpeg"
+    | "image/png"
+    | "image/gif"
+    | "image/webp";
+  const buffer = await imageRes.arrayBuffer();
+  const base64 = Buffer.from(buffer).toString("base64");
+
+  const msg = await anthropic.messages.create({
+    model: MODEL,
+    max_tokens: 400,
+    system:
+      "You describe ONLY what is visually present in a product photo — shape, color, visible dial layout, " +
+      "visible complications (chronograph subdials, date window, GMT hand, etc.), case and strap material " +
+      "appearance, and similar. You must NEVER state a specific brand, model name, reference number, or exact " +
+      "technical specification (water resistance rating, movement caliber, case diameter in mm, etc.) — you " +
+      "cannot verify any of that from a photo alone, and a confident-sounding guess is worse than no answer. If " +
+      "asked to identify the model or exact specs, say plainly that this can't be reliably determined from an " +
+      "image alone. Keep the description factual and useful for someone writing a quiz question about what's " +
+      "visible — a few sentences, not a long essay.",
+    messages: [
+      {
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } },
+          { type: "text", text: "Describe what's visually present in this image." }
+        ]
+      }
+    ]
+  });
+  return extractText(msg).trim();
+}

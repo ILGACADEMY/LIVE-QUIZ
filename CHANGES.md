@@ -1883,6 +1883,212 @@ Files: `src/app/play/[sessionId]/page.tsx`,
 `src/components/admin/PresentationView.tsx`,
 `src/components/admin/AdminSessionDashboard.tsx`.
 
+## 74. Multiple named accounts, per-user quiz limits, and a super admin role
+
+Real accounts instead of one shared password — built the way you asked:
+preset username/password (you set them, hand them out — no signup
+links, no email involved), you as super admin, and everyone else capped
+at 5 quizzes of their own by default (adjustable per person).
+
+**What changed under the hood, in plain terms**: previously, anyone with
+the one shared password could see and edit every quiz — there was no
+concept of "whose" anything was. Now each quiz is tagged with who made
+it. A regular account only sees their own quizzes (plus anything made
+before this update, which stays visible to everyone rather than
+vanishing). You, as super admin, see everything from everyone.
+
+**Real separation, not just a hidden list**: I specifically checked
+whether someone could still reach or edit another person's quiz
+directly by its link even though it wouldn't show in their list — they
+could have. Closed that everywhere it mattered: viewing, editing,
+deleting, duplicating, and launching a quiz all now actually check
+whether it's yours. Duplicating also now correctly counts against your
+own limit and lands in your own space, rather than being a way to get
+around the cap or accidentally creating another orphaned quiz.
+
+**You can never get locked out**: your existing admin password keeps
+working exactly as it always has — logging in with it (leaving the
+username blank) grants full super admin access regardless of the
+accounts table. That's what lets you get into "Manage accounts" for the
+very first time, and it stays as a permanent fallback afterward.
+
+**Verified, not just written**: tested the actual password hashing and
+the signed-session logic directly — including confirming that a
+tampered session (someone editing their own login cookie to try to
+grant themselves admin rights) is correctly rejected, not just assumed
+to be.
+
+**One real gap I found while checking this, unrelated to accounts, and
+fixed along the way**: no logout button existed anywhere in the admin
+area at all, for anyone. Added one, along with a small "logged in as
+[name]" indicator, which matters more now that individual people share
+this space.
+
+Files: `src/lib/admin-auth.ts`, `src/app/api/admin/login/route.ts`,
+`src/app/api/admin/logout/route.ts`,
+`src/app/api/admin/users/route.ts` (new),
+`src/app/api/admin/users/[id]/route.ts` (new),
+`src/app/api/quizzes/route.ts`, `src/app/api/quizzes/[id]/route.ts`,
+`src/app/api/quizzes/[id]/duplicate/route.ts`,
+`src/app/api/sessions/route.ts`, `src/app/admin/login/page.tsx`,
+`src/app/admin/page.tsx`, `src/app/admin/users/page.tsx` (new),
+`src/components/admin/ManageUsers.tsx` (new),
+`src/components/admin/QuizLibrary.tsx`,
+`src/components/admin/LogoutButton.tsx` (new),
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`,
+`package.json` (added `bcryptjs` for password hashing).
+
+## 75. Rebrand: ILG removed, Meridian stands on its own
+
+Every visible "ILG" reference across the app is now "Meridian" — the
+small tracking labels on login/admin/home pages, the presenter screen
+header, the certificate's default organization name, the results PDF
+heading and filenames, the site title, and the watch QR experience's
+text and metadata. Checked with a full-codebase search afterward to
+confirm nothing was missed, not just the files expected to have it.
+
+**The main wordmark** (the large "Meridian" mark shown on the join
+screen, waiting screen, and leaderboard) no longer shows a company logo
+next to it — it now carries the new tagline underneath instead:
+"The reference point you measure your own growth from." Meridian is
+now the product's own identity, not a badge next to someone else's logo.
+
+**An honest note on how this went**: while rewriting the wordmark
+component, a tool-parameter mistake on my end briefly wiped the file
+to empty — the same class of error from a few updates back with the
+leaderboard page. Caught it immediately this time by checking the file
+right after the edit rather than assuming it worked, and restored it
+correctly before moving on.
+
+Files: `src/components/shared/MeridianWordmark.tsx`,
+`src/components/admin/PresentationView.tsx`,
+`src/components/admin/BrandingSettings.tsx`,
+`src/app/admin/users/page.tsx`, `src/app/admin/page.tsx`,
+`src/app/admin/login/page.tsx`, `src/app/page.tsx`,
+`src/app/layout.tsx`, `src/app/play/[sessionId]/results/page.tsx`,
+`src/app/api/admin/branding/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`public/watch-transform.html`.
+
+## 76. Trainer Assistant — the foundation for the "AI agent access" direction, built the right way round
+
+Built the first real piece of the "keep pace with the MCP/agent-access
+pattern" direction — but deliberately as an internal capability first,
+not a rushed external one. Reasoning: a genuinely external, OAuth-gated
+API that other AI agents connect to belongs on top of proper
+multi-tenancy, which doesn't exist yet (today's data model is still one
+company's worth of quizzes). Building the external version now would
+mean rebuilding it once multi-tenancy exists.
+
+What this actually is: a chat-style assistant on a new `/admin/assistant`
+page where a trainer can ask things like "what are my biggest knowledge
+gaps" or "which questions should I review," and get answers grounded in
+their own real quiz data — never fabricated. Built around four named,
+well-scoped data functions (list quizzes, knowledge gaps, question
+performance, recent sessions), each respecting the same per-user
+ownership rules as the rest of the app.
+
+**Why this specific shape matters for the roadmap**: these four
+functions are built in exactly the shape an external MCP tool definition
+takes — a name, a clear input, a grounded output. The chat route calling
+them today is one transport layer; a future OAuth-gated MCP server
+calling the same functions would be a different transport layer around
+the *same underlying logic*. This is the deliberate "same strength,
+different access method" adaptation, rather than copying Loopwise's
+course-content version of this idea directly.
+
+**Safety properties, verified rather than assumed**: every function
+explicitly reports when there's too little data to conclude anything
+(few responses, or a session that's already been auto-deleted after 24
+hours) rather than presenting a thin sample as a confident finding. The
+system prompt explicitly forbids inventing numbers a tool didn't return.
+Tested the actual aggregation logic with known mock data to confirm
+correct output before relying on it, and confirmed the Anthropic SDK's
+tool-use types were used correctly against the real type definitions,
+not just something that happened to compile.
+
+Files: `src/lib/assistant-tools.ts` (new),
+`src/app/api/ai/assistant/route.ts` (new),
+`src/components/admin/TrainerAssistant.tsx` (new),
+`src/app/admin/assistant/page.tsx` (new), `src/app/admin/page.tsx`.
+
+## 77. Durable answer event log — the actual prerequisite for real history (and eventually ML)
+
+Every quiz answer is now recorded a second time, into a new
+`answer_events` table that survives the 24-hour session cleanup —
+category, learning topic, difficulty, correct/incorrect, response time,
+and a snapshot of the question's own text at the moment it was
+answered. This is the concrete thing that makes "wait until we have
+enough data" an actual plan rather than a hope — without it, no amount
+of time passing would accumulate anything, since everything currently
+gets deleted daily.
+
+**A deliberate design detail**: this table is intentionally NOT
+foreign-keyed to `sessions.id` — a cascading foreign key there would
+delete these rows the moment the session cleanup job runs, defeating
+the entire point. `session_id` is kept only as a plain reference field.
+
+**The Trainer Assistant immediately gets more honest and more useful
+from this**: `get_knowledge_gaps` and `get_question_performance` now
+read from this permanent log instead of whatever sessions haven't been
+auto-deleted yet — so "what are my biggest knowledge gaps" now
+genuinely means the quiz's real history, not just the last 24 hours.
+Updated their tool descriptions and the assistant's own system prompt
+to state this accurately rather than leave a stale "only recent data"
+caveat in place where it's no longer true. `get_recent_sessions` still
+has that limitation, correctly — it needs live session-specific detail
+(participant counts) that only exists while a session hasn't been
+cleaned up yet.
+
+**Verified, not just written**: re-tested the aggregation math with
+known mock data against the new simplified structure and confirmed it
+still produces the correct percentages and sort order.
+
+**What this deliberately doesn't do yet**: it doesn't identify or track
+individual learners across sessions — that's the separate "persistent
+learner identity" decision flagged in the original Learning
+Intelligence audit, still a real product/privacy decision to make
+explicitly, not a default to fall into. This log is aggregate-level
+(by quiz, category, and question) on purpose, so it's useful immediately
+without needing that decision made first.
+
+A concrete threshold worth watching for: once this log has a few
+thousand recorded answers across a few months of real use, that's
+roughly where a trained model would have enough to genuinely learn from
+— before that, the Trainer Assistant reasoning directly over this data
+will outperform anything trained on too little.
+
+Files: `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`,
+`src/app/api/sessions/[id]/answer/route.ts`, `src/lib/assistant-tools.ts`,
+`src/app/api/ai/assistant/route.ts`.
+
+## 78. AI image description — finished and shipped (was interrupted last time)
+
+Added an "AI: Describe this image" button next to any uploaded question
+photo. Click it, and it reports what's actually visible — case shape,
+dial color, visible complications (chronograph subdials, date window,
+GMT hand), strap material appearance — worded from Claude's vision,
+grounded only in the pixels themselves.
+
+**Deliberately does NOT identify a specific brand, model, or exact
+spec** (water resistance rating, movement caliber, precise case
+diameter) — the system prompt explicitly forbids it, and says plainly
+"can't be reliably determined from an image alone" if pushed. The
+reasoning, unchanged from when this was first discussed: Claude has
+essentially never seen ILG's own private-label watch models during
+training, so a confident-sounding specific identification would very
+often just be a plausible guess — and wrong specs stated with
+confidence are exactly the wrong thing to let into training content.
+This only ever reports what a human could also see by looking at the
+photo themselves.
+
+Clears any previous description automatically when a new image is
+uploaded or the current one is removed, so a stale description can
+never sit next to the wrong photo.
+
+Files: `src/lib/ai.ts`, `src/app/api/ai/describe-image/route.ts` (new),
+`src/components/admin/QuestionEditor.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

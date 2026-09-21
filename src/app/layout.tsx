@@ -17,8 +17,8 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space
 const italiana = Italiana({ subsets: ["latin"], variable: "--font-italiana", weight: "400" });
 
 export const metadata: Metadata = {
-  title: "Meridian — ILG Academy Live Quiz",
-  description: "ILG Academy's live training quiz engine."
+  title: "Meridian — The reference point you measure your own growth from",
+  description: "Meridian's live training quiz and learning platform."
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

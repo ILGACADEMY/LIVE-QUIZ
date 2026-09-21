@@ -188,7 +188,7 @@ export default function ResultsPage({
     const incorrectCount = data.breakdown.length - correctCount;
     const completedDate = data.completedAt ? new Date(data.completedAt) : null;
 
-    addText("ILG Academy", { size: 12, bold: true, gap: 18 });
+    addText("Meridian", { size: 12, bold: true, gap: 18 });
     addText(data.quizTitle, { size: 18, bold: true, gap: 24 });
     addText(`Participant: ${data.name}`, { size: 12, gap: 16 });
     if (completedDate) {
@@ -238,11 +238,11 @@ export default function ResultsPage({
       y += 8;
     });
 
-    // ILG_Academy_[Participant_Name]_[Quiz_Name]_Result.pdf, with spaces
+    // Meridian_[Participant_Name]_[Quiz_Name]_Result.pdf, with spaces
     // and anything non-alphanumeric collapsed to underscores so the
     // filename is always safe regardless of what's in either string.
     const safe = (s: string) => s.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    doc.save(`ILG_Academy_${safe(data.name)}_${safe(data.quizTitle)}_Result.pdf`);
+    doc.save(`Meridian_${safe(data.name)}_${safe(data.quizTitle)}_Result.pdf`);
   }
 
   // Certificate — a separate, dedicated PDF from the results one above,
@@ -341,7 +341,7 @@ export default function ResultsPage({
       doc.setFontSize(9);
       doc.setTextColor(80, 80, 80);
       doc.text(completedDate.toLocaleDateString(), pageWidth * 0.28, pageHeight * 0.88, { align: "center" });
-      doc.save(`ILG_Academy_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
+      doc.save(`Meridian_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
       return;
     }
 
@@ -388,7 +388,7 @@ export default function ResultsPage({
 
     // Stacked text header — org name large with a short red underline
     // accent beneath it, subtitle smaller below, matching the reference
-    // design's "ILG" / "ACADEMY" treatment regardless of the exact words
+    // design's two-tier treatment regardless of the exact words
     // configured in Branding settings.
     centered(orgName, y, { size: 22, bold: true, color: [90, 95, 105] });
     doc.setDrawColor(140, 30, 30);
@@ -491,7 +491,7 @@ export default function ResultsPage({
     doc.text("DATE", 150, footerY + 26, { align: "center" });
     doc.text("DIRECTEUR ACADÉMIQUE", pageWidth - 150, footerY + 26, { align: "center" });
 
-    doc.save(`ILG_Academy_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
+    doc.save(`Meridian_Certificate_${safe(certificate.participantName)}_${safe(certificate.quizTitle)}.pdf`);
   }
 
   if (error) {

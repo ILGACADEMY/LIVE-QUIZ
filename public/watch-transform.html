@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  ILG ACADEMY — "THE WATCH THAT BECOMES A QR"
+  MERIDIAN — "THE WATCH THAT BECOMES A QR"
   ============================================
   A standalone, dependency-light interactive experience:
   exploded mechanical watch -> mechanical particles -> real QR code.
@@ -19,8 +19,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>ILG Academy — The Watch That Becomes a QR</title>
-<meta name="description" content="Tap the watch. Watch precision become a QR code. Scan to join the ILG Academy quiz." />
+<title>Meridian — The Watch That Becomes a QR</title>
+<meta name="description" content="Tap the watch. Watch precision become a QR code. Scan to join the Meridian quiz." />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,340;9..144,440;9..144,560&family=Space+Grotesk:wght@400;500;600&display=swap" rel="stylesheet">
@@ -234,14 +234,14 @@
 
 <div id="ui">
   <div class="brand">
-    <span class="mark">ILG <em>|</em> ACADEMY</span><br/>
+    <span class="mark">MERIDIAN</span><br/>
     <span class="academy">DISCOVER&nbsp;THE&nbsp;MECHANICS</span>
   </div>
 
   <div id="labels"></div>
 
   <div id="qrWrap">
-    <canvas id="qrCanvas" width="600" height="600" role="img" aria-label="QR code linking to the ILG Academy quiz"></canvas>
+    <canvas id="qrCanvas" width="600" height="600" role="img" aria-label="QR code linking to the Meridian quiz"></canvas>
     <div id="qrUrlText">ilgquiz.vercel.app/join</div>
   </div>
 
@@ -328,7 +328,7 @@ function hasWebGL() {
 if (!hasWebGL()) {
   document.getElementById("tapTarget").style.display = "none";
   document.getElementById("stateText").textContent = "SCAN TO JOIN";
-  document.getElementById("subText").textContent = "ILG Academy";
+  document.getElementById("subText").textContent = "Meridian";
   qrWrap.classList.add("show");
   drawRealQR();
   throw new Error("WebGL unavailable -- fell back to static QR display.");
@@ -936,7 +936,7 @@ function animate(now) {
     case State.QR: {
       particles.visible = false;
       qrWrap.classList.add("show");
-      setCaption("SCAN TO JOIN THE QUIZ", "ILG Academy", true);
+      setCaption("SCAN TO JOIN THE QUIZ", "Meridian", true);
       break;
     }
   }

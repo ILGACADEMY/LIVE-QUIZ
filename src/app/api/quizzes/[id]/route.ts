@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { toQuestionRow } from "@/lib/question-fields";
+
+// A super admin can reach any quiz; a regular user can reach their own
+// or a "legacy" (ownerless) one, matching the same rule the quiz list
+// uses — this is what makes per-user separation real rather than just
+// hiding other people's quizzes from one list while still letting
+// anyone reach them directly by ID.
+function canAccess(session: { role: string; userId: string | null }, ownerId: string | null): boolean {
+  return session.role === "super_admin" || ownerId === null || ownerId === session.userId;
+}
 
 // GET /api/quizzes/:id — quiz + full question list, for the editor/preview
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminRequestAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = getAdminSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { data: quiz, error: quizError } = await supabaseAdmin
     .from("quizzes")
@@ -15,6 +23,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .eq("id", params.id)
     .single();
   if (quizError) return NextResponse.json({ error: quizError.message }, { status: 404 });
+  if (!canAccess(session, quiz.owner_id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const { data: questions, error: qError } = await supabaseAdmin
     .from("questions")
@@ -31,9 +40,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // spec §6); we replace-in-place by order_index rather than diffing, which
 // keeps "no coding, no JSON editing" simple for the admin UI to implement.
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminRequestAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = getAdminSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: existing } = await supabaseAdmin.from("quizzes").select("owner_id").eq("id", params.id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Quiz not found." }, { status: 404 });
+  if (!canAccess(session, existing.owner_id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
 
   const body = await req.json();
   const { quiz, questions } = body as {
@@ -71,9 +83,13 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 // DELETE /api/quizzes/:id
 export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  if (!isAdminRequestAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = getAdminSession(req);
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: existing } = await supabaseAdmin.from("quizzes").select("owner_id").eq("id", params.id).maybeSingle();
+  if (!existing) return NextResponse.json({ error: "Quiz not found." }, { status: 404 });
+  if (!canAccess(session, existing.owner_id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
+
   const { error } = await supabaseAdmin.from("quizzes").delete().eq("id", params.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });

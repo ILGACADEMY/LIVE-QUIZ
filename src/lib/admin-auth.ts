@@ -1,21 +1,66 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { NextRequest } from "next/server";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 const COOKIE_NAME = "ilg_admin_session";
 
 /**
- * Deliberately simple: one shared ADMIN_PASSWORD env var gates the whole
- * /admin area. On login we set an httpOnly cookie holding the password
- * itself — good enough for a single-organization internal tool behind
- * HTTPS. (A named, expiring, per-quiz trainer-login system was built and
- * then deliberately reverted — it added real complexity for a need that
- * didn't end up being worth it. If that need comes back later, it's
- * still in this project's git history to revive rather than rebuild from
- * scratch.)
+ * Named admin accounts, each with their own preset username and
+ * password (set by the super admin — there's no self-service signup
+ * or email flow, by design). The cookie holds a small signed token —
+ * { userId, role } — rather than a raw password, so the server can
+ * tell WHICH person is logged in, not just "is someone logged in."
+ * Signed with HMAC-SHA256 using ADMIN_PASSWORD as the secret, so no
+ * new environment variable is needed beyond what's already set up.
+ *
+ * ADMIN_PASSWORD itself still works too, as a master recovery
+ * login — logging in with just that (no username) grants full
+ * super-admin access regardless of the admin_users table. This
+ * matters because there's no "forgot password" email flow here: if
+ * every named account somehow got locked out, this is the only way
+ * back in, and it's already the one credential guaranteed to be set
+ * (it's required for the app to run at all).
  */
-export function isValidAdminPassword(password: string): boolean {
-  return Boolean(process.env.ADMIN_PASSWORD) && password === process.env.ADMIN_PASSWORD;
+
+export interface AdminSession {
+  userId: string | null; // null for a master-password login — there's no specific account behind it
+  role: "user" | "super_admin";
+  username: string; // "master" for the recovery login
+}
+
+function sign(payload: string): string {
+  const secret = process.env.ADMIN_PASSWORD ?? "";
+  return crypto.createHmac("sha256", secret).update(payload).digest("hex");
+}
+
+function encodeSession(session: AdminSession): string {
+  const payload = Buffer.from(JSON.stringify(session)).toString("base64url");
+  return `${payload}.${sign(payload)}`;
+}
+
+function decodeSession(token: string | undefined): AdminSession | null {
+  if (!token) return null;
+  const [payload, signature] = token.split(".");
+  if (!payload || !signature) return null;
+  const expected = sign(payload);
+  const a = Buffer.from(signature);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 export function adminCookieOptions() {
@@ -29,14 +74,34 @@ export function adminCookieOptions() {
   };
 }
 
+export function createSessionToken(session: AdminSession): string {
+  return encodeSession(session);
+}
+
+export function isValidMasterPassword(password: string): boolean {
+  return Boolean(process.env.ADMIN_PASSWORD) && password === process.env.ADMIN_PASSWORD;
+}
+
+/** For API routes (NextRequest-based). */
+export function getAdminSession(req: NextRequest): AdminSession | null {
+  return decodeSession(req.cookies.get(COOKIE_NAME)?.value);
+}
+
 export function isAdminRequestAuthorized(req: NextRequest): boolean {
-  const cookie = req.cookies.get(COOKIE_NAME)?.value;
-  return Boolean(cookie) && cookie === process.env.ADMIN_PASSWORD;
+  return getAdminSession(req) !== null;
+}
+
+export function isSuperAdminRequest(req: NextRequest): boolean {
+  return getAdminSession(req)?.role === "super_admin";
+}
+
+/** For server components/actions (cookies()-based, no request object). */
+export function getAdminSessionFromCookies(): AdminSession | null {
+  return decodeSession(cookies().get(COOKIE_NAME)?.value);
 }
 
 export function isAdminSessionAuthorized(): boolean {
-  const cookie = cookies().get(COOKIE_NAME)?.value;
-  return Boolean(cookie) && cookie === process.env.ADMIN_PASSWORD;
+  return getAdminSessionFromCookies() !== null;
 }
 
 export { COOKIE_NAME };

@@ -69,7 +69,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     .maybeSingle();
   const branding = {
     logoUrl: appSettings?.logo_url ?? null,
-    orgName: appSettings?.certificate_org_name ?? "ILG ACADEMY",
+    orgName: appSettings?.certificate_org_name ?? "MERIDIAN",
     orgSubtitle: appSettings?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
     location: appSettings?.certificate_location ?? null,
     backgroundUrl: appSettings?.certificate_background_url ?? null,

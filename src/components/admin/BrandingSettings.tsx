@@ -5,7 +5,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 
 export default function BrandingSettings() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [orgName, setOrgName] = useState("ILG ACADEMY");
+  const [orgName, setOrgName] = useState("MERIDIAN");
   const [orgSubtitle, setOrgSubtitle] = useState("TRAINING & DEVELOPMENT");
   const [location, setLocation] = useState("");
   const [textSaved, setTextSaved] = useState(true);
@@ -21,7 +21,7 @@ export default function BrandingSettings() {
       .then((r) => r.json())
       .then((data) => {
         setLogoUrl(data.logoUrl ?? null);
-        setOrgName(data.certificateOrgName ?? "ILG ACADEMY");
+        setOrgName(data.certificateOrgName ?? "MERIDIAN");
         setOrgSubtitle(data.certificateOrgSubtitle ?? "TRAINING & DEVELOPMENT");
         setLocation(data.certificateLocation ?? "");
         setCertBg(data.certificateBackgroundUrl ?? null);
@@ -155,7 +155,7 @@ export default function BrandingSettings() {
               setTextSaved(false);
             }}
             className="field-input text-sm"
-            placeholder="ILG ACADEMY"
+            placeholder="MERIDIAN"
           />
           <input
             value={orgSubtitle}
@@ -174,7 +174,7 @@ export default function BrandingSettings() {
             setTextSaved(false);
           }}
           className="field-input text-sm"
-          placeholder="Optional location line, e.g. ILG of Switzerland, Möhlin, Aargau Switzerland"
+          placeholder="Optional location line, e.g. City, Country"
         />
         {!textSaved && (
           <button onClick={saveText} className="btn-ghost text-sm px-4 py-2 mt-3">

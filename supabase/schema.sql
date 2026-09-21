@@ -9,8 +9,27 @@ create extension if not exists "pgcrypto";
 -- ---------------------------------------------------------------------------
 -- QUIZ TEMPLATES (permanent)
 -- ---------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Multiple named admin accounts, each with their own preset username and
+-- password (set by the super admin — no self-service signup or email
+-- flow). role='super_admin' can see and manage every account's quizzes
+-- and reset anyone's password; role='user' is capped at quiz_limit quizzes
+-- of their own. Passwords are bcrypt-hashed, never stored in plain text.
+-- ---------------------------------------------------------------------------
+create table if not exists admin_users (
+  id             uuid primary key default gen_random_uuid(),
+  username       text unique not null,
+  password_hash  text not null,
+  display_name   text,
+  role           text not null default 'user' check (role in ('user', 'super_admin')),
+  quiz_limit     int not null default 5, -- ignored for role='super_admin', which has no cap
+  created_at     timestamptz not null default now()
+);
+alter table admin_users enable row level security;
+
 create table if not exists quizzes (
   id                        uuid primary key default gen_random_uuid(),
+  owner_id                  uuid references admin_users(id) on delete set null, -- null = a legacy quiz from before named accounts existed, or an account since deleted; visible to every user, not just the super admin, so nothing already made disappears on upgrade
   title                     text not null,
   description               text default '',
   time_limit_minutes        int  not null default 15,
@@ -356,3 +375,23 @@ create table if not exists trainers (
 );
 create unique index if not exists idx_trainers_name on trainers(lower(name));
 
+-- ---------------------------------------------------------------------------
+-- Durable answer event log — survives the 24h session/answers cleanup on
+-- purpose. Deliberately NOT foreign-keyed to sessions.id (a cascading FK
+-- there would delete these rows right along with the session, defeating
+-- the point); session_id is kept only as a plain reference field.
+-- ---------------------------------------------------------------------------
+create table if not exists answer_events (
+  id             uuid primary key default gen_random_uuid(),
+  quiz_id        uuid references quizzes(id) on delete cascade,
+  session_id     uuid,
+  question_index int not null,
+  question_text  text,
+  category       text,
+  learning_topic text,
+  difficulty     text,
+  is_correct     boolean not null,
+  elapsed_ms     int not null,
+  answered_at    timestamptz not null default now()
+);
+create index if not exists idx_answer_events_quiz on answer_events(quiz_id, answered_at desc);

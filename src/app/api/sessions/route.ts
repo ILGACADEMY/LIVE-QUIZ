@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { isAdminRequestAuthorized } from "@/lib/admin-auth";
+import { getAdminSession } from "@/lib/admin-auth";
 import { Quiz, Question } from "@/lib/types";
 
 // POST /api/sessions — "LAUNCH LIVE SESSION" (spec §20)
 export async function POST(req: NextRequest) {
-  if (!isAdminRequestAuthorized(req)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session_ = getAdminSession(req);
+  if (!session_) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { quiz_id } = await req.json();
   if (!quiz_id) return NextResponse.json({ error: "quiz_id is required" }, { status: 400 });
@@ -16,8 +15,13 @@ export async function POST(req: NextRequest) {
     .from("quizzes")
     .select("*")
     .eq("id", quiz_id)
-    .single<Quiz>();
+    .single<Quiz & { owner_id: string | null }>();
   if (quizError || !quiz) return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+  // Same rule as everywhere else: your own quiz, a legacy (ownerless)
+  // one, or you're the super admin — otherwise this isn't yours to launch.
+  if (session_.role !== "super_admin" && quiz.owner_id !== null && quiz.owner_id !== session_.userId) {
+    return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+  }
 
   const { data: questions, error: qError } = await supabaseAdmin
     .from("questions")

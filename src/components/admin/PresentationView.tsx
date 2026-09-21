@@ -98,7 +98,7 @@ export default function PresentationView({
       </div>
 
       <p className="text-gold tracking-[0.3em]" style={{ fontSize: "clamp(0.8rem, 1.2vw, 1.1rem)" }}>
-        ILG&nbsp;|&nbsp;ACADEMY
+        MERIDIAN
       </p>
       <p className="text-parchment/60 mt-1 mb-[2vh] text-center" style={{ fontSize: "clamp(1rem, 1.6vw, 1.5rem)" }}>
         {quizTitle}

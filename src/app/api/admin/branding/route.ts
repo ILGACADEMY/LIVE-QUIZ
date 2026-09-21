@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   return NextResponse.json({
     logoUrl: data?.logo_url ?? null,
-    certificateOrgName: data?.certificate_org_name ?? "ILG ACADEMY",
+    certificateOrgName: data?.certificate_org_name ?? "MERIDIAN",
     certificateOrgSubtitle: data?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
     certificateLocation: data?.certificate_location ?? "",
     certificateBackgroundUrl: data?.certificate_background_url ?? null
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
   const { logoUrl, certificateOrgName, certificateOrgSubtitle, certificateLocation, certificateBackgroundUrl } = await req.json();
   const update: Record<string, unknown> = {};
   if (logoUrl !== undefined) update.logo_url = logoUrl;
-  if (certificateOrgName !== undefined) update.certificate_org_name = certificateOrgName || "ILG ACADEMY";
+  if (certificateOrgName !== undefined) update.certificate_org_name = certificateOrgName || "MERIDIAN";
   if (certificateOrgSubtitle !== undefined) update.certificate_org_subtitle = certificateOrgSubtitle || "TRAINING & DEVELOPMENT";
   if (certificateLocation !== undefined) update.certificate_location = certificateLocation || null;
   if (certificateBackgroundUrl !== undefined) update.certificate_background_url = certificateBackgroundUrl || null;

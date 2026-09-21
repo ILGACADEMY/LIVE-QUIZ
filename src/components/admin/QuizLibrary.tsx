@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Quiz } from "@/lib/types";
 
-type QuizRow = Quiz & { question_count: number };
+type QuizRow = Quiz & { question_count: number; owner_username: string | null; owner_display_name: string | null };
 
 export default function QuizLibrary() {
   const router = useRouter();
@@ -99,7 +99,14 @@ export default function QuizLibrary() {
           {quizzes.map((q) => (
             <div key={q.id} className="p-5 flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
               <div className="flex-1 min-w-0">
-                <p className="font-display text-lg truncate">{q.title}</p>
+                <p className="font-display text-lg truncate">
+                  {q.title}
+                  {(q.owner_display_name || q.owner_username) && (
+                    <span className="text-parchment/40 text-xs font-body ml-2 align-middle">
+                      · {q.owner_display_name || q.owner_username}
+                    </span>
+                  )}
+                </p>
                 <p className="text-parchment/50 text-xs mt-1">
                   {q.question_count} question{q.question_count !== 1 ? "s" : ""} · {q.time_limit_minutes} min ·{" "}
                   {q.pass_mark_percent}% pass · {q.scoring_mode === "speed_bonus" ? "Speed bonus" : "Standard"} scoring ·{" "}

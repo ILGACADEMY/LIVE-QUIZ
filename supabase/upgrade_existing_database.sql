@@ -116,3 +116,38 @@ create table if not exists certificates (
   issued_at           timestamptz not null default now(),
   unique (session_id, participant_id)
 );
+
+-- ============ named admin accounts (preset username/password, per-user quiz limits) ============
+create table if not exists admin_users (
+  id             uuid primary key default gen_random_uuid(),
+  username       text unique not null,
+  password_hash  text not null,
+  display_name   text,
+  role           text not null default 'user' check (role in ('user', 'super_admin')),
+  quiz_limit     int not null default 5,
+  created_at     timestamptz not null default now()
+);
+alter table quizzes add column if not exists owner_id uuid references admin_users(id) on delete set null;
+
+-- ============ durable answer event log (survives 24h session cleanup) ============
+-- Deliberately NOT foreign-keyed to sessions.id — sessions (and today's
+-- answers table) are auto-deleted 24 hours after finishing, and a
+-- cascading FK to sessions would delete these rows right along with
+-- them, defeating the entire point. session_id is kept as a plain
+-- reference field (useful for debugging/tracing) but never gates this
+-- table's own lifetime. Foreign-keyed to quizzes instead, since quizzes
+-- themselves are never auto-deleted.
+create table if not exists answer_events (
+  id             uuid primary key default gen_random_uuid(),
+  quiz_id        uuid references quizzes(id) on delete cascade,
+  session_id     uuid, -- intentionally not a foreign key — see comment above
+  question_index int not null,
+  question_text  text,
+  category       text,
+  learning_topic text,
+  difficulty     text,
+  is_correct     boolean not null,
+  elapsed_ms     int not null,
+  answered_at    timestamptz not null default now()
+);
+create index if not exists idx_answer_events_quiz on answer_events(quiz_id, answered_at desc);

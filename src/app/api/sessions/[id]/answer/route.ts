@@ -94,6 +94,30 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: insertError.message }, { status: 500 });
   }
 
+  // Also logged here, separately — this row survives the 24h cleanup
+  // that removes the session/answers rows above; it's what lets
+  // knowledge-gap and question-performance analysis look back further
+  // than "whatever hasn't been auto-deleted yet." Deliberately
+  // fire-and-forget: a failure here should never block scoring a
+  // participant's actual answer, which is the primary thing this route
+  // does.
+  supabaseAdmin
+    .from("answer_events")
+    .insert({
+      quiz_id: session.quiz_id,
+      session_id: params.id,
+      question_index: questionIndex,
+      question_text: question.question_text,
+      category: question.category,
+      learning_topic: question.learning_topic,
+      difficulty: question.difficulty,
+      is_correct: result.isCorrect,
+      elapsed_ms: elapsedMs
+    })
+    .then(({ error }) => {
+      if (error) console.error("answer_events insert failed:", error.message);
+    });
+
   // Score totals update immediately; advancing to the next question is now
   // entirely the presenter's call (POST /advance), never automatic here —
   // so current_question_index/current_question_started_at/completed_at are
