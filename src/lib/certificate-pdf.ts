@@ -227,31 +227,34 @@ export async function buildCertificatePdf(input: CertificateInput): Promise<jsPD
 
   drawMicrotextBand(doc, centerX, 48, input.quizTitle);
 
-  let y = 80;
+  let y = 96;
 
   const companyLogo = logoUrl ? await loadImageAsDataUrl(logoUrl) : null;
   const brandLogo = brandLogoUrl ? await loadImageAsDataUrl(brandLogoUrl) : null;
   if (companyLogo || brandLogo) {
-    const maxW = 84;
-    const maxH = 34;
-    const gap = 24;
-    function fitted(logo: { dataUrl: string; width: number; height: number }) {
+    const gap = 28;
+    function fitted(logo: { dataUrl: string; width: number; height: number }, maxW: number, maxH: number) {
       const scale = Math.min(maxW / logo.width, maxH / logo.height);
       return { w: logo.width * scale, h: logo.height * scale };
     }
     if (companyLogo && brandLogo) {
-      const c = fitted(companyLogo);
-      const b = fitted(brandLogo);
+      // Two logos share the space, so each gets a moderate allowance
+      // rather than the larger one below — still noticeably bigger
+      // than before, just leaving room for both side by side.
+      const c = fitted(companyLogo, 110, 52);
+      const b = fitted(brandLogo, 110, 52);
       const totalW = c.w + gap + b.w;
       const startX = centerX - totalW / 2;
       doc.addImage(companyLogo.dataUrl, startX, y - c.h, c.w, c.h);
       doc.addImage(brandLogo.dataUrl, startX + c.w + gap, y - b.h, b.w, b.h);
-      y += 18;
+      y += 26;
     } else {
+      // Only one logo — nothing else to share the space with, so it
+      // gets a genuinely large, prominent allowance.
       const logo = (companyLogo ?? brandLogo)!;
-      const f = fitted(logo);
+      const f = fitted(logo, 190, 84);
       doc.addImage(logo.dataUrl, centerX - f.w / 2, y - f.h, f.w, f.h);
-      y += 18;
+      y += 26;
     }
   }
 

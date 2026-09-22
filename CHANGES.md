@@ -2365,6 +2365,19 @@ be, not something that competes with the actual certificate content.
 
 Files: `src/lib/certificate-pdf.ts`.
 
+## 88. Certificate logo — made significantly bigger and more prominent
+
+The brand/company logo was rendering quite small and thin (an 84x34pt
+allowance, sized for a wide horizontal bar rather than a real logo
+mark). Enlarged it substantially — up to 190x84pt when only one logo
+is shown (nothing else sharing that space), or 110x52pt each when both
+a company logo and a per-quiz brand logo appear side by side.
+Re-verified the full vertical layout afterward to confirm the larger
+logo still leaves a comfortable, un-overlapping gap before the score
+block and footer below it.
+
+Files: `src/lib/certificate-pdf.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
