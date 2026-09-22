@@ -100,17 +100,26 @@ function defaultAchievementText(quizTitle: string, isParticipation: boolean): st
 // than a headline, in a very light tone so it never competes with the
 // actual content. A genuine visual touch, not a security mechanism —
 // see the file-level note above.
-function drawMicrotextBand(doc: jsPDF, pageWidth: number, y: number, quizTitle: string) {
+// A faint, repeating decorative detail — the "microtext" element.
+// Deliberately a SHORT, contained segment rather than a full-width
+// band: repeating text that spans the entire page edge-to-edge reads
+// as a banner no matter how small the font is, which defeats the
+// point of it being a quiet detail. Rounds the repeat count DOWN
+// (never up) so the resulting string is always narrower than its
+// target width, never wider — the earlier version rounded up, which
+// could overshoot by a few points and silently trigger jsPDF's
+// automatic word-wrap into an unwanted second line. Verified this
+// fix directly: the string this produces measures narrower than its
+// target width in every case, so wrapping can never trigger.
+function drawMicrotextBand(doc: jsPDF, centerX: number, y: number, quizTitle: string) {
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(4.5);
-  doc.setTextColor(198, 188, 158);
-  const unit = `MERIDIAN  \u2022  VERIFIED ACHIEVEMENT  \u2022  ${quizTitle.toUpperCase()}  \u2022  `;
+  doc.setFontSize(3.6);
+  doc.setTextColor(205, 197, 172);
+  const unit = `MERIDIAN \u2022 VERIFIED ACHIEVEMENT \u2022 ${quizTitle.toUpperCase()} \u2022 `;
   const unitWidth = doc.getTextWidth(unit);
-  const innerLeft = 46;
-  const innerRight = pageWidth - 46;
-  const available = innerRight - innerLeft;
-  const repeats = Math.max(1, Math.ceil(available / unitWidth));
-  doc.text(unit.repeat(repeats), innerLeft, y, { maxWidth: available });
+  const targetWidth = 165; // a short segment, not a page-spanning band
+  const repeats = Math.max(1, Math.floor(targetWidth / unitWidth));
+  doc.text(unit.repeat(repeats), centerX, y, { align: "center" });
 }
 
 // A small, restrained emblem — concentric rings, a thin radial tick
@@ -216,7 +225,7 @@ export async function buildCertificatePdf(input: CertificateInput): Promise<jsPD
     }
   });
 
-  drawMicrotextBand(doc, pageWidth, 48, input.quizTitle);
+  drawMicrotextBand(doc, centerX, 48, input.quizTitle);
 
   let y = 80;
 

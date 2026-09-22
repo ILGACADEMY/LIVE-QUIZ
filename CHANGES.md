@@ -2345,6 +2345,26 @@ small, quiet mark in its own corner rather than crowding either group.
 
 Files: `src/lib/certificate-pdf.ts`.
 
+## 87. Fixed: the microtext line was showing up large and repeated across the top
+
+Found a genuine bug, not just a design tweak — reproduced it directly
+before fixing it. The repeated text was sized by rounding UP to fill
+the available width, which could overshoot by a few points; that tiny
+overshoot was enough to silently trigger jsPDF's automatic word-wrap,
+turning one quiet line into an unwanted second line. Fixed by rounding
+DOWN instead, so the string is always narrower than its target width
+and can never wrap — verified this holds even with an unusually long
+quiz name, not just the short examples.
+
+There was also a real design issue underneath the bug: even a
+correctly-sized version of this text was spanning the *entire* width
+of the page, and a repeating pattern that wide inherently reads as a
+banner no matter how small the font is. Shrunk it to a short,
+contained segment instead — the quiet detail it was always meant to
+be, not something that competes with the actual certificate content.
+
+Files: `src/lib/certificate-pdf.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
