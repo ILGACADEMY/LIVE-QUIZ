@@ -2198,6 +2198,153 @@ Files: `src/lib/types.ts`, `src/app/api/sessions/[id]/advance/route.ts`,
 `src/app/api/sessions/[id]/export/route.ts`,
 `src/app/api/ai/analysis/route.ts`, `src/lib/assistant-tools.ts`.
 
+## 82. Certificate redesigned — new layout, real signature, date-only
+
+Rebuilt the certificate to match the template you approved: a proper
+double-line frame, "CERTIFICATE OF ACHIEVEMENT" / "AWARDED TO" in
+English, achievement text now says "quiz" instead of "training
+program" (and reads "In recognition of participating in this quiz"
+for participation-mode certificates, or "...successfully completing
+this quiz, with a score of X%" otherwise). The seal and the watch-dial
+decoration are both gone entirely, as asked.
+
+**A real signature, not decorative text**: added a new "Signature"
+section in Branding settings — upload an actual photo of your
+handwritten signature, plus your name to print beneath it. Both are
+optional; leave the image unset and it just shows the printed name
+alone with nothing above it.
+
+**Date is date-only now, no time, no "DATE" label** — just the plain
+date itself, on the opposite side from the signature.
+
+**The name-cutoff concern from the mockup review — actually fixed,
+not just reassured about**: added a real safety net that measures the
+participant's name and the quiz title against the page width and
+shrinks the font size, one step at a time, until it genuinely fits —
+never letting either clip regardless of how long they are. Tested this
+directly: a short name keeps its full size unchanged, while a
+deliberately very long name shrinks exactly as far as needed and never
+below a readable floor.
+
+Files: `src/lib/certificate-pdf.ts`,
+`src/app/api/admin/branding/route.ts`,
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/components/admin/BrandingSettings.tsx`,
+`src/app/play/[sessionId]/results/page.tsx`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`.
+
+## 83. Certificate — premium redesign with dynamic, brand-aware wording
+
+Rebuilt the achievement statement to the exact template requested —
+"For successfully completing the [QUIZ NAME] Product Knowledge
+Assessment and demonstrating a strong understanding of the brand, its
+collection, key product features, technical characteristics, and
+selling attributes." — generated from the quiz's own title, so it
+reads correctly for Tsar Bomba, Ducati, Titan, or any future quiz
+without ever touching this file again. Verified this directly against
+several different quiz names rather than assuming the substitution
+works. A quiz's own custom message, if an admin sets one, still
+overrides this default, with `{quiz}` now available as a placeholder
+alongside the existing `{name}`/`{score}`.
+
+**A dedicated score block, not buried in a sentence**: "FINAL
+ASSESSMENT SCORE" now appears as its own prominent element with a
+large percentage beneath it, separate from the achievement paragraph
+— skipped entirely for a participation-mode certificate, where no
+single score is what qualifies someone for it.
+
+**The signature is now genuinely large** — sized to actually occupy
+its column as a real signature would, not float as a small image in
+mostly empty space. Simulated the full vertical layout end to end to
+confirm this doesn't collide with the achievement text or score block
+above it even in the worst case (a long wrapped statement plus the
+largest the signature can render) — a comfortable 100pt-plus gap
+either way.
+
+Also: "PRESENTED TO" (was "AWARDED TO"), and the date now reads as a
+full month name ("21 September 2026") rather than the abbreviated
+short-month format from before.
+
+Files: `src/lib/certificate-pdf.ts`.
+
+## 84. Certificate verification system — the real anti-reuse feature, working end to end
+
+Before building anything, worth restating plainly what's actually
+possible here, since it shaped every decision below: a digital PDF
+cannot have a genuine holographic effect (that's a physical property
+of foil under light, not something any file format can reproduce),
+and no amount of visual decoration stops someone with PDF-editing
+tools from changing a name or score — a PDF without real cryptographic
+signing always has an editable text layer. Built accordingly: the
+decorative elements are honestly decorative, and the one thing that
+provides real, working protection is a genuine verification system,
+built for real rather than left as a "future" placeholder.
+
+**What's real and working now**: every certificate gets a unique,
+quiz-aware ID — `MER-TB-2026-000921` for a "Tsar Bomba" quiz,
+`MER-DUC-...` for "Ducati," derived automatically from the quiz's own
+title (verified this against several quiz names, including the exact
+examples given, before relying on it). A QR code on the certificate
+links to a genuinely live, public verification page
+(`/verify/[certificate-id]`) that looks up the *actual* server-side
+record made the moment the certificate was first issued — recipient,
+quiz, score, date — and displays it plainly. This doesn't prevent
+editing a PDF; it makes a mismatch between what's printed and what's
+on record detectable by anyone who checks, which is the same model
+real certification bodies use.
+
+**The decorative elements, honestly framed as such in the code's own
+comments**: a small circular emblem (concentric rings, a radial tick
+pattern, an org-initial monogram) in one corner, balancing the QR code
+in the other; a faint, repeating microtext line along the top inner
+edge; and subtle corner-only ring patterns hinting at a guilloche
+texture without covering or competing with the actual content —
+restrained specifically so it doesn't read as a banknote or a
+government document, per the request.
+
+**Verified, not assumed**: tested the QR generation with the exact
+transparency settings used in the real code and confirmed it produces
+a genuine PNG with a working alpha channel, not a silently-broken
+option.
+
+Files: `src/lib/certificate-id.ts` (new),
+`src/lib/certificate-pdf.ts`,
+`src/app/api/certificates/verify/[number]/route.ts` (new),
+`src/app/verify/[number]/page.tsx` (new),
+`src/app/api/sessions/[id]/certificate/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`,
+`src/components/admin/BrandingSettings.tsx`,
+`supabase/schema.sql`, `supabase/upgrade_existing_database.sql`,
+`package.json` (added `qrcode` for generating the embeddable QR image).
+
+## 85. Certificate footer — two small refinements
+
+Removed the line above the date. Reasoning: a line above the signature
+carries real meaning (the "sign here" convention), but a line above a
+plain date doesn't — it was only there to mirror the signature side.
+Dropping it creates a small, deliberate asymmetry that puts the visual
+weight on the signature instead, which is the one genuinely personal
+element on the page.
+
+Date now reads with an ordinal day ("21st September 2026" instead of
+"21 September 2026") — verified the suffix logic against the tricky
+11th/12th/13th exceptions (which don't get "st"/"nd"/"rd" despite
+ending in 1/2/3) before trusting it.
+
+Files: `src/lib/certificate-pdf.ts`.
+
+## 86. Certificate footer regrouped — the record on one side, the signature on the other
+
+Moved the QR code and certificate ID up to sit directly with the date,
+all stacked in one group on the left — previously the date sat alone
+in the main footer row while the QR/ID sat separately just below it,
+which read as two scattered elements rather than one. Now the split
+is intentional: left side is the verifiable record (QR, certificate
+ID, date), right side is the human signature. The emblem stays as a
+small, quiet mark in its own corner rather than crowding either group.
+
+Files: `src/lib/certificate-pdf.ts`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this

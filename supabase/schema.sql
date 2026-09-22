@@ -348,6 +348,8 @@ create table if not exists app_settings (
   certificate_org_name text not null default 'ILG ACADEMY',
   certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT',
   certificate_location text, -- optional line near the bottom, e.g. "ILG OF SWITZERLAND MÖHLIN, AARGAU SWITZERLAND"; blank = not shown
+  certificate_signer_name text, -- printed under the signature image, e.g. "Mohamed Dilshad Rahim"
+  certificate_signature_url text, -- an uploaded image of an actual handwritten signature, shown above the signer name
   certificate_background_url text, -- optional full-page background image (a designed template) — if set, drawn behind everything else instead of the built-in drawn layout
   updated_at timestamptz not null default now()
 );
@@ -395,3 +397,10 @@ create table if not exists answer_events (
   answered_at    timestamptz not null default now()
 );
 create index if not exists idx_answer_events_quiz on answer_events(quiz_id, answered_at desc);
+
+create or replace function next_certificate_sequence()
+returns bigint
+language sql
+as $$
+  select nextval('certificate_number_seq');
+$$;

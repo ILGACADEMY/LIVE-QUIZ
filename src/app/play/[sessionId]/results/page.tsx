@@ -68,11 +68,22 @@ export default function ResultsPage({
   const [error, setError] = useState<string | null>(null);
   const [certificate, setCertificate] = useState<{
     certificateNumber: string;
+    verifyUrl: string | null;
     participantName: string;
     quizTitle: string;
     scorePercent: number;
     issuedAt: string;
-    branding: { logoUrl: string | null; orgName: string; orgSubtitle: string; message: string | null; brandLogoUrl: string | null; location: string | null; backgroundUrl: string | null };
+    branding: {
+      logoUrl: string | null;
+      orgName: string;
+      orgSubtitle: string;
+      message: string | null;
+      brandLogoUrl: string | null;
+      location: string | null;
+      backgroundUrl: string | null;
+      signerName: string | null;
+      signatureUrl: string | null;
+    };
   } | null>(null);
 
   useEffect(() => {
@@ -103,6 +114,7 @@ export default function ResultsPage({
         if (d.eligible) {
           setCertificate({
             certificateNumber: d.certificateNumber,
+            verifyUrl: d.verifyUrl ?? null,
             participantName: d.participantName,
             quizTitle: d.quizTitle,
             scorePercent: d.scorePercent,
@@ -267,7 +279,9 @@ export default function ResultsPage({
       scorePercent: certificate.scorePercent,
       passMarkPercent: data.passMarkPercent,
       completedDate,
-      branding: certificate.branding
+      branding: certificate.branding,
+      certificateNumber: certificate.certificateNumber,
+      verifyUrl: certificate.verifyUrl
     });
     doc.save(`Meridian_Certificate_${safeFilename(certificate.participantName)}_${safeFilename(certificate.quizTitle)}.pdf`);
   }

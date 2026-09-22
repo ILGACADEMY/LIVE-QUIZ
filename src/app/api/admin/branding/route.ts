@@ -9,7 +9,9 @@ export async function GET(req: NextRequest) {
   }
   const { data } = await supabaseAdmin
     .from("app_settings")
-    .select("logo_url, certificate_org_name, certificate_org_subtitle, certificate_location, certificate_background_url")
+    .select(
+      "logo_url, certificate_org_name, certificate_org_subtitle, certificate_location, certificate_background_url, certificate_signer_name, certificate_signature_url"
+    )
     .limit(1)
     .maybeSingle();
   return NextResponse.json({
@@ -17,32 +19,45 @@ export async function GET(req: NextRequest) {
     certificateOrgName: data?.certificate_org_name ?? "MERIDIAN",
     certificateOrgSubtitle: data?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
     certificateLocation: data?.certificate_location ?? "",
-    certificateBackgroundUrl: data?.certificate_background_url ?? null
+    certificateBackgroundUrl: data?.certificate_background_url ?? null,
+    certificateSignerName: data?.certificate_signer_name ?? "",
+    certificateSignatureUrl: data?.certificate_signature_url ?? null
   });
 }
 
 /**
  * POST /api/admin/branding
  * Body: { logoUrl?, certificateOrgName?, certificateOrgSubtitle?,
- *         certificateLocation?, certificateBackgroundUrl? } — send only
+ *         certificateLocation?, certificateBackgroundUrl?,
+ *         certificateSignerName?, certificateSignatureUrl? } — send only
  * the fields you're changing; omitted ones are left as they are. Upload
  * a file to Storage first, then call this with the resulting public
- * URL — same pattern for the logo and the certificate background.
- * certificateBackgroundUrl set to an empty string clears it (falls back
- * to the built-in drawn certificate layout).
+ * URL — same pattern for the logo, the certificate background, and the
+ * signature image. certificateBackgroundUrl/certificateSignatureUrl set
+ * to an empty string clears them.
  */
 export async function POST(req: NextRequest) {
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { logoUrl, certificateOrgName, certificateOrgSubtitle, certificateLocation, certificateBackgroundUrl } = await req.json();
+  const {
+    logoUrl,
+    certificateOrgName,
+    certificateOrgSubtitle,
+    certificateLocation,
+    certificateBackgroundUrl,
+    certificateSignerName,
+    certificateSignatureUrl
+  } = await req.json();
   const update: Record<string, unknown> = {};
   if (logoUrl !== undefined) update.logo_url = logoUrl;
   if (certificateOrgName !== undefined) update.certificate_org_name = certificateOrgName || "MERIDIAN";
   if (certificateOrgSubtitle !== undefined) update.certificate_org_subtitle = certificateOrgSubtitle || "TRAINING & DEVELOPMENT";
   if (certificateLocation !== undefined) update.certificate_location = certificateLocation || null;
   if (certificateBackgroundUrl !== undefined) update.certificate_background_url = certificateBackgroundUrl || null;
+  if (certificateSignerName !== undefined) update.certificate_signer_name = certificateSignerName || null;
+  if (certificateSignatureUrl !== undefined) update.certificate_signature_url = certificateSignatureUrl || null;
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "Nothing to update." }, { status: 400 });

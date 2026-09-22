@@ -1,4 +1,6 @@
 import { jsPDF } from "jspdf";
+import QRCode from "qrcode";
+import { quizCode } from "./certificate-id";
 
 /**
  * The certificate's actual drawing logic, extracted out of the
@@ -7,6 +9,18 @@ import { jsPDF } from "jspdf";
  * can never drift out of sync with what a real participant gets.
  * Takes plain, explicit values rather than reading component state,
  * which is what makes it usable from two very different contexts.
+ *
+ * A note on the verification elements below (QR code, certificate
+ * number, emblem, the faint line pattern): these make tampering
+ * DETECTABLE, not impossible. A PDF without real cryptographic
+ * signing always has an editable text layer — no amount of visual
+ * decoration prevents someone with PDF-editing tools from changing a
+ * name or score. What the QR code and certificate number actually do
+ * is let anyone check the printed details against the permanent
+ * server-side record made the moment this certificate was first
+ * issued — a mismatch there is the real tell. The emblem and line
+ * pattern are genuine premium visual touches, not cryptographic
+ * protection, and are presented here as exactly that.
  */
 
 export interface CertificateBranding {
@@ -17,6 +31,8 @@ export interface CertificateBranding {
   brandLogoUrl: string | null;
   location: string | null;
   backgroundUrl: string | null;
+  signerName: string | null;
+  signatureUrl: string | null;
 }
 
 export interface CertificateInput {
@@ -26,12 +42,14 @@ export interface CertificateInput {
   passMarkPercent: number; // 0 means a participation certificate — see isParticipationCertificate below
   completedDate: Date;
   branding: CertificateBranding;
+  // Both optional — an older, already-issued certificate re-rendered
+  // without a stored number (shouldn't happen going forward, but a
+  // graceful fallback matters more than a hard crash) simply omits
+  // the QR/ID block rather than showing broken placeholders.
+  certificateNumber?: string | null;
+  verifyUrl?: string | null;
 }
 
-// Loads a remote image as a data URL jsPDF can actually embed —
-// addImage() needs base64 data or an HTMLImageElement, not a plain URL,
-// since the PDF is a self-contained file with no network access of its
-// own once downloaded.
 async function loadImageAsDataUrl(url: string): Promise<{ dataUrl: string; width: number; height: number } | null> {
   try {
     const res = await fetch(url);
@@ -54,13 +72,76 @@ async function loadImageAsDataUrl(url: string): Promise<{ dataUrl: string; width
   }
 }
 
+function formatDateOnly(d: Date): string {
+  const day = d.getDate();
+  const suffix = day % 10 === 1 && day !== 11 ? "st" : day % 10 === 2 && day !== 12 ? "nd" : day % 10 === 3 && day !== 13 ? "rd" : "th";
+  const monthYear = d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  return `${day}${suffix} ${monthYear}`;
+}
+
+function fittedFontSize(doc: jsPDF, text: string, maxWidth: number, startSize: number, minSize: number): number {
+  let size = startSize;
+  doc.setFontSize(size);
+  while (size > minSize && doc.getTextWidth(text) > maxWidth) {
+    size -= 1;
+    doc.setFontSize(size);
+  }
+  return size;
+}
+
+function defaultAchievementText(quizTitle: string, isParticipation: boolean): string {
+  return isParticipation
+    ? `For participating in the ${quizTitle} Product Knowledge Assessment and engaging with the brand, its collection, key product features, technical characteristics, and selling attributes.`
+    : `For successfully completing the ${quizTitle} Product Knowledge Assessment and demonstrating a strong understanding of the brand, its collection, key product features, technical characteristics, and selling attributes.`;
+}
+
+// A faint, repeating decorative line along the top inner edge — the
+// "microtext" element. Small enough to read as a fine detail rather
+// than a headline, in a very light tone so it never competes with the
+// actual content. A genuine visual touch, not a security mechanism —
+// see the file-level note above.
+function drawMicrotextBand(doc: jsPDF, pageWidth: number, y: number, quizTitle: string) {
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(4.5);
+  doc.setTextColor(198, 188, 158);
+  const unit = `MERIDIAN  \u2022  VERIFIED ACHIEVEMENT  \u2022  ${quizTitle.toUpperCase()}  \u2022  `;
+  const unitWidth = doc.getTextWidth(unit);
+  const innerLeft = 46;
+  const innerRight = pageWidth - 46;
+  const available = innerRight - innerLeft;
+  const repeats = Math.max(1, Math.ceil(available / unitWidth));
+  doc.text(unit.repeat(repeats), innerLeft, y, { maxWidth: available });
+}
+
+// A small, restrained emblem — concentric rings, a thin radial tick
+// pattern, and a monogram — evoking a certification seal without
+// looking like a sticker or a banknote device. Purely decorative.
+function drawEmblem(doc: jsPDF, cx: number, cy: number, orgName: string) {
+  doc.setDrawColor(138, 109, 31);
+  doc.setLineWidth(0.6);
+  doc.circle(cx, cy, 20, "S");
+  doc.circle(cx, cy, 15.5, "S");
+  for (let i = 0; i < 24; i++) {
+    const angle = (i * 15 * Math.PI) / 180;
+    const r1 = 15.5;
+    const r2 = 17.5;
+    doc.line(cx + r1 * Math.cos(angle), cy + r1 * Math.sin(angle), cx + r2 * Math.cos(angle), cy + r2 * Math.sin(angle));
+  }
+  const initial = (orgName.trim()[0] || "M").toUpperCase();
+  doc.setFont("times", "bold");
+  doc.setFontSize(15);
+  doc.setTextColor(138, 109, 31);
+  doc.text(initial, cx, cy + 5.2, { align: "center" });
+}
+
 export async function buildCertificatePdf(input: CertificateInput): Promise<jsPDF> {
   const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const centerX = pageWidth / 2;
-  const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl, location, backgroundUrl } = input.branding;
+  const { orgName, orgSubtitle, logoUrl, message, brandLogoUrl, location, backgroundUrl, signerName, signatureUrl } = input.branding;
   const completedDate = input.completedDate;
+  const isParticipationCertificate = input.passMarkPercent === 0;
 
   function centered(text: string, y: number, opts: { size?: number; bold?: boolean; italic?: boolean; color?: [number, number, number]; tracked?: boolean } = {}) {
     const { size = 12, bold = false, italic = false, color = [30, 30, 30], tracked = false } = opts;
@@ -71,12 +152,9 @@ export async function buildCertificatePdf(input: CertificateInput): Promise<jsPD
     doc.text(rendered, centerX, y, { align: "center" });
   }
 
-  const isParticipationCertificate = input.passMarkPercent === 0;
-  const defaultAchievementText = isParticipationCertificate
-    ? `En reconnaissance de sa participation au programme ${orgName} ${orgSubtitle}.`
-    : `En reconnaissance de la r\u00e9ussite du programme ${orgName} ${orgSubtitle}, avec un score de {score}%.`;
-  const achievementText = (message || defaultAchievementText)
+  const achievementText = (message || defaultAchievementText(input.quizTitle, isParticipationCertificate))
     .replace(/\{name\}/gi, input.participantName)
+    .replace(/\{quiz\}/gi, input.quizTitle)
     .replace(/\{score\}/gi, String(input.scorePercent));
 
   // ---- Path A: a fully custom uploaded background image ----
@@ -85,35 +163,68 @@ export async function buildCertificatePdf(input: CertificateInput): Promise<jsPD
     if (bg) {
       doc.addImage(bg.dataUrl, "JPEG", 0, 0, pageWidth, pageHeight);
     }
-    centered(input.quizTitle.toUpperCase(), pageHeight * 0.32, { size: 22, bold: true, color: [140, 30, 30] });
-    centered(input.participantName, pageHeight * 0.46, { size: 22, bold: true, color: [40, 40, 40] });
+    doc.setFont("helvetica", "bold");
+    const titleSize = fittedFontSize(doc, input.quizTitle.toUpperCase(), pageWidth * 0.7, 22, 14);
+    centered(input.quizTitle.toUpperCase(), pageHeight * 0.3, { size: titleSize, bold: true, color: [140, 30, 30] });
+    doc.setFont("helvetica", "bold");
+    const nameSize = fittedFontSize(doc, input.participantName, pageWidth * 0.6, 22, 14);
+    centered(input.participantName, pageHeight * 0.42, { size: nameSize, bold: true, color: [40, 40, 40] });
     const lines = doc.splitTextToSize(achievementText, pageWidth * 0.55) as string[];
-    let ly = pageHeight * 0.58;
+    let ly = pageHeight * 0.53;
     lines.forEach((line) => {
       centered(line, ly, { size: 10.5, color: [80, 80, 80] });
       ly += 14;
     });
+    if (!isParticipationCertificate) {
+      ly += 10;
+      centered("FINAL ASSESSMENT SCORE", ly, { size: 8.5, color: [140, 140, 132], tracked: true });
+      centered(`${input.scorePercent}%`, ly + 24, { size: 22, bold: true, color: [138, 109, 31] });
+    }
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(80, 80, 80);
-    doc.text(completedDate.toLocaleDateString(), pageWidth * 0.28, pageHeight * 0.88, { align: "center" });
+    doc.text(formatDateOnly(completedDate), pageWidth * 0.28, pageHeight * 0.9, { align: "center" });
+    if (input.certificateNumber) {
+      doc.setFontSize(7);
+      doc.setTextColor(140, 140, 132);
+      doc.text(input.certificateNumber, pageWidth - 50, pageHeight - 20, { align: "right" });
+    }
     return doc;
   }
 
   // ---- Path B: the built-in drawn layout ----
-  doc.setDrawColor(140, 30, 30);
-  doc.setLineWidth(3);
-  doc.rect(20, 20, pageWidth - 40, pageHeight - 40);
+  doc.setDrawColor(138, 109, 31);
+  doc.setLineWidth(2);
+  doc.rect(24, 24, pageWidth - 48, pageHeight - 48);
   doc.setLineWidth(1);
-  doc.rect(30, 30, pageWidth - 60, pageHeight - 60);
+  doc.rect(34, 34, pageWidth - 68, pageHeight - 68);
 
-  let y = 75;
+  // Faint decorative line texture in the four corners only — a hint of
+  // a guilloche pattern without covering (or competing with) the main
+  // content in the center of the page.
+  doc.setDrawColor(232, 222, 194);
+  doc.setLineWidth(0.4);
+  const cornerInsets: [number, number][] = [
+    [34, 34],
+    [pageWidth - 34, 34],
+    [34, pageHeight - 34],
+    [pageWidth - 34, pageHeight - 34]
+  ];
+  cornerInsets.forEach(([cx, cy]) => {
+    for (let r = 10; r <= 50; r += 10) {
+      doc.circle(cx, cy, r, "S");
+    }
+  });
+
+  drawMicrotextBand(doc, pageWidth, 48, input.quizTitle);
+
+  let y = 80;
 
   const companyLogo = logoUrl ? await loadImageAsDataUrl(logoUrl) : null;
   const brandLogo = brandLogoUrl ? await loadImageAsDataUrl(brandLogoUrl) : null;
   if (companyLogo || brandLogo) {
-    const maxW = 90;
-    const maxH = 38;
+    const maxW = 84;
+    const maxH = 34;
     const gap = 24;
     function fitted(logo: { dataUrl: string; width: number; height: number }) {
       const scale = Math.min(maxW / logo.width, maxH / logo.height);
@@ -126,102 +237,125 @@ export async function buildCertificatePdf(input: CertificateInput): Promise<jsPD
       const startX = centerX - totalW / 2;
       doc.addImage(companyLogo.dataUrl, startX, y - c.h, c.w, c.h);
       doc.addImage(brandLogo.dataUrl, startX + c.w + gap, y - b.h, b.w, b.h);
-      y += 20;
+      y += 18;
     } else {
       const logo = (companyLogo ?? brandLogo)!;
       const f = fitted(logo);
       doc.addImage(logo.dataUrl, centerX - f.w / 2, y - f.h, f.w, f.h);
-      y += 20;
+      y += 18;
     }
   }
 
-  centered(orgName, y, { size: 22, bold: true, color: [90, 95, 105] });
-  doc.setDrawColor(140, 30, 30);
-  doc.setLineWidth(1.5);
-  doc.line(centerX - 55, y + 8, centerX + 55, y + 8);
-  y += 34;
-  centered(orgSubtitle, y, { size: 13, color: [90, 95, 105], tracked: true });
-  y += 55;
-
-  centered("CERTIFI\u00c9", y, { size: 15, color: [90, 95, 105], tracked: true });
-  y += 40;
-  centered(input.quizTitle.toUpperCase(), y, { size: 26, bold: true, color: [140, 30, 30] });
-  y += 34;
-  centered("D\u00c9CERN\u00c9 \u00c0", y, { size: 12, color: [60, 60, 60], tracked: true });
-  y += 45;
-
-  centered(input.participantName, y, { size: 22, bold: true, color: [40, 40, 40] });
-  y += 8;
-  doc.setDrawColor(150, 150, 150);
-  doc.setLineWidth(0.75);
-  doc.line(centerX - 160, y, centerX + 160, y);
-  y += 34;
-
-  const achievementLines = doc.splitTextToSize(achievementText.toUpperCase(), pageWidth - 260) as string[];
-  achievementLines.forEach((line) => {
-    centered(line, y, { size: 11, color: [50, 50, 50] });
-    y += 16;
-  });
+  centered(orgName, y, { size: 24, bold: true, color: [138, 109, 31] });
   y += 20;
-
-  const dialCenterY = y + 55;
-  doc.setDrawColor(225, 205, 205);
+  const quizTitleSize = fittedFontSize(doc, input.quizTitle.toUpperCase(), pageWidth - 200, 13, 10);
+  centered(input.quizTitle.toUpperCase(), y, { size: quizTitleSize, color: [90, 95, 105], tracked: true });
+  y += 26;
+  doc.setDrawColor(138, 109, 31);
   doc.setLineWidth(1);
-  doc.circle(centerX, dialCenterY, 58, "S");
-  doc.circle(centerX, dialCenterY, 48, "S");
-  for (let i = 0; i < 12; i++) {
-    const angle = (i * 30 * Math.PI) / 180;
-    const x1 = centerX + 52 * Math.sin(angle);
-    const y1 = dialCenterY - 52 * Math.cos(angle);
-    const x2 = centerX + 58 * Math.sin(angle);
-    const y2 = dialCenterY - 58 * Math.cos(angle);
-    doc.line(x1, y1, x2, y2);
-  }
-  y = dialCenterY + 70;
+  doc.line(centerX - 36, y, centerX + 36, y);
+  y += 28;
 
-  const sealY = y + 26;
-  doc.setFillColor(120, 20, 25);
-  doc.circle(centerX, sealY, 24, "F");
-  doc.setDrawColor(160, 60, 60);
-  doc.setLineWidth(1);
-  doc.circle(centerX, sealY, 18, "S");
-  const initials = orgName
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 3)
-    .toUpperCase();
+  centered("CERTIFICATE OF ACHIEVEMENT", y, { size: 11, color: [140, 140, 132], tracked: true });
+  y += 34;
+  centered("PRESENTED TO", y, { size: 10, color: [140, 140, 132], tracked: true });
+  y += 28;
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(190, 140, 140);
-  doc.text(initials, centerX, sealY + 4, { align: "center" });
-  y = sealY + 50;
+  const nameSize = fittedFontSize(doc, input.participantName, pageWidth - 280, 24, 15);
+  centered(input.participantName, y, { size: nameSize, bold: true, color: [40, 40, 40] });
+  y += 8;
+  doc.setDrawColor(201, 194, 172);
+  doc.setLineWidth(0.75);
+  doc.line(centerX - 130, y, centerX + 130, y);
+  y += 24;
+
+  const achievementLines = doc.splitTextToSize(achievementText, pageWidth - 340) as string[];
+  achievementLines.forEach((line) => {
+    centered(line, y, { size: 11, color: [74, 74, 70] });
+    y += 15;
+  });
+
+  if (!isParticipationCertificate) {
+    y += 18;
+    centered("FINAL ASSESSMENT SCORE", y, { size: 9, color: [140, 140, 132], tracked: true });
+    y += 30;
+    centered(`${input.scorePercent}%`, y, { size: 30, bold: true, color: [138, 109, 31] });
+    y += 14;
+  } else {
+    y += 10;
+  }
 
   if (location) {
-    centered(location.toUpperCase(), y, { size: 8.5, color: [90, 90, 90] });
-    y += 12;
+    y += 22;
+    centered(location.toUpperCase(), y, { size: 8.5, color: [140, 140, 132] });
   }
 
-  const footerY = pageHeight - 55;
-  doc.setDrawColor(90, 90, 90);
-  doc.setLineWidth(0.75);
-  doc.line(70, footerY, 230, footerY);
-  doc.line(pageWidth - 230, footerY, pageWidth - 70, footerY);
+  // ---- Footer: the verifiable record (QR, certificate ID, date) all
+  // grouped together on the left, the human signature on the right —
+  // a cleaner split than scattering the QR/ID separately below the
+  // date used to be, and it reads with more intention: one side is
+  // the record, the other is the person who signed it. ----
+  const footerY = pageHeight - 68;
+  const colLeftX = centerX - 175;
+  const colRightX = centerX + 165;
 
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(16);
-  doc.setTextColor(60, 60, 90);
-  doc.text("A.", pageWidth - 190, footerY - 10);
-  doc.setLineWidth(1);
-  doc.line(pageWidth - 175, footerY - 14, pageWidth - 150, footerY - 20);
-  doc.line(pageWidth - 150, footerY - 20, pageWidth - 120, footerY - 8);
+  if (signatureUrl) {
+    const sig = await loadImageAsDataUrl(signatureUrl);
+    if (sig) {
+      const maxSigW = 210;
+      const maxSigH = 78;
+      const scale = Math.min(maxSigW / sig.width, maxSigH / sig.height);
+      const w = sig.width * scale;
+      const h = sig.height * scale;
+      doc.addImage(sig.dataUrl, colRightX - w / 2, footerY - h - 8, w, h);
+    }
+  }
+
+  // Only the signature gets a line above it — that's the one place a
+  // line carries real meaning ("sign here").
+  doc.setDrawColor(138, 138, 132);
+  doc.setLineWidth(0.75);
+  doc.line(colRightX - 95, footerY, colRightX + 95, footerY);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(90, 90, 90);
-  doc.text(completedDate.toLocaleDateString("fr-FR"), 150, footerY + 14, { align: "center" });
-  doc.text("DATE", 150, footerY + 26, { align: "center" });
-  doc.text("DIRECTEUR ACAD\u00c9MIQUE", pageWidth - 150, footerY + 26, { align: "center" });
+  doc.setFontSize(11);
+  doc.setTextColor(40, 40, 40);
+  if (signerName) {
+    doc.text(signerName, colRightX, footerY + 16, { align: "center" });
+  }
+
+  // The left group: QR code above, certificate ID just beneath it,
+  // then the date on the same baseline as the signer's printed name —
+  // so the two columns still align cleanly across their final row even
+  // though what's stacked above differs. See the file-level note at
+  // the top of this file — the QR/ID is what actually lets a mismatch
+  // be detected, not what prevents editing.
+  let hasQr = false;
+  if (input.verifyUrl) {
+    try {
+      const qrDataUrl = await QRCode.toDataURL(input.verifyUrl, { margin: 0, width: 200, color: { dark: "#2a2a28", light: "#00000000" } });
+      const qrSize = 48;
+      doc.addImage(qrDataUrl, "PNG", colLeftX - qrSize / 2, footerY - 66, qrSize, qrSize);
+      hasQr = true;
+    } catch {
+      // A QR generation failure should never break certificate
+      // download — the certificate itself is still fully valid
+      // without it, just missing this one extra verification aid.
+    }
+  }
+  if (input.certificateNumber) {
+    doc.setFont("courier", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(140, 140, 132);
+    doc.text(input.certificateNumber, colLeftX, hasQr ? footerY - 10 : footerY, { align: "center" });
+  }
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(11);
+  doc.setTextColor(40, 40, 40);
+  doc.text(formatDateOnly(completedDate), colLeftX, footerY + 16, { align: "center" });
+
+  drawEmblem(doc, pageWidth - 56, pageHeight - 58, orgName);
 
   return doc;
 }

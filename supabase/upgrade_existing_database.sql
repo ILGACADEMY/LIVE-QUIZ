@@ -81,6 +81,8 @@ alter table quizzes add column if not exists brand_logo_url text;
 alter table app_settings add column if not exists certificate_org_name text not null default 'ILG ACADEMY';
 alter table app_settings add column if not exists certificate_org_subtitle text not null default 'TRAINING & DEVELOPMENT';
 alter table app_settings add column if not exists certificate_location text;
+alter table app_settings add column if not exists certificate_signer_name text;
+alter table app_settings add column if not exists certificate_signature_url text;
 alter table app_settings add column if not exists certificate_background_url text;
 
 -- ============ persistent attempt history, survives the 24h session cleanup ============
@@ -151,3 +153,10 @@ create table if not exists answer_events (
   answered_at    timestamptz not null default now()
 );
 create index if not exists idx_answer_events_quiz on answer_events(quiz_id, answered_at desc);
+
+create or replace function next_certificate_sequence()
+returns bigint
+language sql
+as $$
+  select nextval('certificate_number_seq');
+$$;

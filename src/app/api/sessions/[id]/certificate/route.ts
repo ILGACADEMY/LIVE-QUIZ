@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession, countScoredQuestions } from "@/lib/types";
+import { generateCertificateNumber } from "@/lib/certificate-id";
 
 // GET /api/sessions/:id/certificate?participantId=X
 //
@@ -64,7 +65,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // certificate for the same participant.
   const { data: appSettings } = await supabaseAdmin
     .from("app_settings")
-    .select("logo_url, certificate_org_name, certificate_org_subtitle, certificate_location, certificate_background_url")
+    .select(
+      "logo_url, certificate_org_name, certificate_org_subtitle, certificate_location, certificate_background_url, certificate_signer_name, certificate_signature_url"
+    )
     .limit(1)
     .maybeSingle();
   const branding = {
@@ -73,9 +76,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     orgSubtitle: appSettings?.certificate_org_subtitle ?? "TRAINING & DEVELOPMENT",
     location: appSettings?.certificate_location ?? null,
     backgroundUrl: appSettings?.certificate_background_url ?? null,
+    signerName: appSettings?.certificate_signer_name ?? null,
+    signatureUrl: appSettings?.certificate_signature_url ?? null,
     message: quiz.certificate_message ?? null,
     brandLogoUrl: quiz.brand_logo_url ?? null
   };
+  // Built once here so every response path below includes it —
+  // whichever certificate number a participant ends up with, this is
+  // the URL the QR code drawn on their PDF actually points to.
+  function verifyUrl(certificateNumber: string) {
+    return `${process.env.NEXT_PUBLIC_APP_URL}/verify/${encodeURIComponent(certificateNumber)}`;
+  }
 
   const { data: existing } = await supabaseAdmin
     .from("certificates")
@@ -87,6 +98,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({
       eligible: true,
       certificateNumber: existing.certificate_number,
+      verifyUrl: verifyUrl(existing.certificate_number),
       participantName: existing.participant_name,
       quizTitle: existing.quiz_title,
       scorePercent: existing.score_percent,
@@ -96,8 +108,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     });
   }
 
-  const { data: numberResult, error: numberError } = await supabaseAdmin.rpc("next_certificate_number");
-  if (numberError || !numberResult) {
+  const numberResult = await generateCertificateNumber(quiz.title);
+  if (!numberResult) {
     return NextResponse.json({ error: "Could not generate a certificate number." }, { status: 500 });
   }
 
@@ -129,6 +141,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
         return NextResponse.json({
           eligible: true,
           certificateNumber: raceWinner.certificate_number,
+          verifyUrl: verifyUrl(raceWinner.certificate_number),
           participantName: raceWinner.participant_name,
           quizTitle: raceWinner.quiz_title,
           scorePercent: raceWinner.score_percent,
@@ -144,6 +157,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({
     eligible: true,
     certificateNumber: created.certificate_number,
+    verifyUrl: verifyUrl(created.certificate_number),
     participantName: created.participant_name,
     quizTitle: created.quiz_title,
     scorePercent: created.score_percent,

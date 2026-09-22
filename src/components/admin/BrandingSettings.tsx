@@ -9,23 +9,28 @@ export default function BrandingSettings() {
   const [orgName, setOrgName] = useState("MERIDIAN");
   const [orgSubtitle, setOrgSubtitle] = useState("TRAINING & DEVELOPMENT");
   const [location, setLocation] = useState("");
+  const [signerName, setSignerName] = useState("");
   const [textSaved, setTextSaved] = useState(true);
   const [certBg, setCertBg] = useState<string | null>(null);
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [certBgUploading, setCertBgUploading] = useState(false);
+  const [signatureUploading, setSignatureUploading] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const certBgInput = useRef<HTMLInputElement>(null);
+  const signatureInput = useRef<HTMLInputElement>(null);
 
-  // Builds a sample certificate with your current logo, wording, and
-  // background — the exact same drawing code that generates a real
-  // one, just fed a placeholder name and score — so you can see how it
-  // actually looks before anyone ever receives one. Opens a blank tab
-  // FIRST, synchronously, then fills it in once the PDF is ready —
-  // building the PDF involves awaiting image loads, and opening a new
-  // tab only after an await tends to get silently blocked as a popup
-  // by most browsers, so the tab has to already exist before that.
+  // Builds a sample certificate with your current logo, wording,
+  // background, and signature — the exact same drawing code that
+  // generates a real one, just fed a placeholder name and score — so
+  // you can see how it actually looks before anyone ever receives one.
+  // Opens a blank tab FIRST, synchronously, then fills it in once the
+  // PDF is ready — building the PDF involves awaiting image loads, and
+  // opening a new tab only after an await tends to get silently
+  // blocked as a popup by most browsers, so the tab has to already
+  // exist before that.
   async function previewCertificate() {
     setPreviewing(true);
     setError(null);
@@ -37,7 +42,19 @@ export default function BrandingSettings() {
         scorePercent: 92,
         passMarkPercent: 60,
         completedDate: new Date(),
-        branding: { orgName, orgSubtitle, logoUrl, message: null, brandLogoUrl: null, location: location || null, backgroundUrl: certBg }
+        branding: {
+          orgName,
+          orgSubtitle,
+          logoUrl,
+          message: null,
+          brandLogoUrl: null,
+          location: location || null,
+          backgroundUrl: certBg,
+          signerName: signerName || null,
+          signatureUrl
+        },
+        certificateNumber: "MER-SMP-2026-000001",
+        verifyUrl: `${window.location.origin}/verify/MER-SMP-2026-000001`
       });
       const blobUrl = doc.output("bloburl");
       if (win) win.location.href = blobUrl.toString();
@@ -59,6 +76,8 @@ export default function BrandingSettings() {
         setOrgSubtitle(data.certificateOrgSubtitle ?? "TRAINING & DEVELOPMENT");
         setLocation(data.certificateLocation ?? "");
         setCertBg(data.certificateBackgroundUrl ?? null);
+        setSignerName(data.certificateSignerName ?? "");
+        setSignatureUrl(data.certificateSignatureUrl ?? null);
       })
       .catch(() => {});
   }, []);
@@ -68,7 +87,12 @@ export default function BrandingSettings() {
     const res = await fetch("/api/admin/branding", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ certificateOrgName: orgName, certificateOrgSubtitle: orgSubtitle, certificateLocation: location })
+      body: JSON.stringify({
+        certificateOrgName: orgName,
+        certificateOrgSubtitle: orgSubtitle,
+        certificateLocation: location,
+        certificateSignerName: signerName
+      })
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -78,18 +102,19 @@ export default function BrandingSettings() {
     setTextSaved(true);
   }
 
-  async function uploadFile(file: File, kind: "logo" | "certBg") {
-    const setBusy = kind === "logo" ? setLoading : setCertBgUploading;
+  async function uploadFile(file: File, kind: "logo" | "certBg" | "signature") {
+    const setBusy = kind === "logo" ? setLoading : kind === "certBg" ? setCertBgUploading : setSignatureUploading;
+    const label = kind === "logo" ? "Logo" : kind === "certBg" ? "Certificate background" : "Signature image";
     setBusy(true);
     setError(null);
     try {
       if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(file.type)) {
-        setError(`${kind === "logo" ? "Logo" : "Certificate background"} must be a JPG, PNG, or WEBP image.`);
+        setError(`${label} must be a JPG, PNG, or WEBP image.`);
         return;
       }
-      const maxSize = kind === "logo" ? 5 : 10;
+      const maxSize = kind === "certBg" ? 10 : 5;
       if (file.size > maxSize * 1024 * 1024) {
-        setError(`${kind === "logo" ? "Logo" : "Certificate background"} must be under ${maxSize}MB.`);
+        setError(`${label} must be under ${maxSize}MB.`);
         return;
       }
 
@@ -112,7 +137,7 @@ export default function BrandingSettings() {
         return;
       }
 
-      const field = kind === "logo" ? "logoUrl" : "certificateBackgroundUrl";
+      const field = kind === "logo" ? "logoUrl" : kind === "certBg" ? "certificateBackgroundUrl" : "certificateSignatureUrl";
       const saveRes = await fetch("/api/admin/branding", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -125,7 +150,8 @@ export default function BrandingSettings() {
       }
 
       if (kind === "logo") setLogoUrl(signData.publicUrl);
-      else setCertBg(signData.publicUrl);
+      else if (kind === "certBg") setCertBg(signData.publicUrl);
+      else setSignatureUrl(signData.publicUrl);
     } catch {
       setError("Network error — the upload never reached the server.");
     } finally {
@@ -142,6 +168,17 @@ export default function BrandingSettings() {
     });
     setCertBgUploading(false);
     if (res.ok) setCertBg(null);
+  }
+
+  async function removeSignature() {
+    setSignatureUploading(true);
+    const res = await fetch("/api/admin/branding", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ certificateSignatureUrl: "" })
+    });
+    setSignatureUploading(false);
+    if (res.ok) setSignatureUrl(null);
   }
 
   return (
@@ -178,7 +215,7 @@ export default function BrandingSettings() {
       <div className="border-t border-hairline pt-5 mb-5">
         <p className="field-label mb-1">Certificate wording</p>
         <p className="text-parchment/40 text-xs mb-3">
-          Shown at the top and bottom of every issued certificate's built-in layout. To customize the achievement
+          Shown at the top of every issued certificate's built-in layout. To customize the achievement
           sentence for a specific quiz's certificate, use that quiz's own Advanced settings instead.
         </p>
         <div className="grid md:grid-cols-2 gap-3 mb-3">
@@ -213,6 +250,54 @@ export default function BrandingSettings() {
         {!textSaved && (
           <button onClick={saveText} className="btn-ghost text-sm px-4 py-2 mt-3">
             Save wording
+          </button>
+        )}
+      </div>
+
+      <div className="border-t border-hairline pt-5 mb-5">
+        <p className="field-label mb-1">Signature</p>
+        <p className="text-parchment/40 text-xs mb-3">
+          Shown at the bottom right of every issued certificate — your actual handwritten signature (an
+          image), with your name printed beneath it. Leave the image unset to show just the printed name with
+          no signature above it.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          {signatureUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={signatureUrl} alt="Signature" className="h-12 w-auto object-contain border border-hairline bg-white px-2" />
+          ) : (
+            <div className="h-12 w-24 border border-hairline flex items-center justify-center text-parchment/30 text-xs">
+              None set
+            </div>
+          )}
+          <input
+            ref={signatureInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0], "signature")}
+          />
+          <button onClick={() => signatureInput.current?.click()} disabled={signatureUploading} className="btn-ghost text-sm px-4 py-2">
+            {signatureUploading ? "Uploading…" : signatureUrl ? "Replace signature" : "Upload signature"}
+          </button>
+          {signatureUrl && (
+            <button onClick={removeSignature} disabled={signatureUploading} className="text-xs text-crimson/80 hover:text-crimson">
+              Remove
+            </button>
+          )}
+        </div>
+        <input
+          value={signerName}
+          onChange={(e) => {
+            setSignerName(e.target.value);
+            setTextSaved(false);
+          }}
+          className="field-input text-sm"
+          placeholder="Printed name below the signature, e.g. Mohamed Dilshad Rahim"
+        />
+        {!textSaved && (
+          <button onClick={saveText} className="btn-ghost text-sm px-4 py-2 mt-3">
+            Save
           </button>
         )}
       </div>
@@ -255,7 +340,10 @@ export default function BrandingSettings() {
       <div className="border-t border-hairline pt-5 flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="field-label mb-1">Preview</p>
-          <p className="text-parchment/40 text-xs">See how a certificate looks with your current logo, wording, and background — with a sample name, before anyone real gets one.</p>
+          <p className="text-parchment/40 text-xs">
+            See how a certificate looks with your current logo, wording, signature, and background — with a
+            sample name, before anyone real gets one.
+          </p>
         </div>
         <button onClick={previewCertificate} disabled={previewing} className="btn-gold text-sm px-4 py-2 shrink-0">
           {previewing ? "Building preview…" : "Preview certificate"}
