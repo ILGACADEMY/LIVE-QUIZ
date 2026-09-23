@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LiveSession, countScoredQuestions } from "@/lib/types";
 import { translateQuestion } from "@/lib/ai";
 import { languageName } from "@/lib/languages";
-import { getPreviousAttempt } from "@/lib/attempt-history";
+import { getPreviousAttempt, getParticipantProfile } from "@/lib/attempt-history";
 
 const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d" } as const;
 
@@ -194,6 +194,11 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   // never collects contact info to match on).
   const participantKey = participant.mobile || participant.email || null;
   const previousAttempt = await getPreviousAttempt(session.quiz_id, participantKey, participant.completed_at);
+  // "You earned X XP — Y total" — the first visible sign of the new
+  // persistent profile system. Null when this quiz doesn't collect
+  // contact info, same condition as previousAttempt above, since both
+  // depend on the same reliable identity.
+  const profile = await getParticipantProfile(participantKey);
 
   // Same shape, grouped by the question's specific learning_topic instead
   // of its broader category — this is what lets the AI profile name a
@@ -226,6 +231,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     breakdown,
     categoryBreakdown,
     topicBreakdown,
-    previousAttempt
+    previousAttempt,
+    profile
   });
 }

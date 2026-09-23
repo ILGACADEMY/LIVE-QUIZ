@@ -35,6 +35,7 @@ interface ResultsData {
   categoryBreakdown: { category: string; correct: number; total: number }[];
   topicBreakdown: { topic: string; correct: number; total: number }[];
   previousAttempt: { categoryBreakdown: { category: string; correct: number; total: number }[]; scorePercent: number; completedAt: string } | null;
+  profile: { xpTotal: number; quizzesCompleted: number } | null;
 }
 
 interface Profile {
@@ -322,6 +323,13 @@ export default function ResultsPage({
 
           <p className="field-label mb-2">Score</p>
           <p className="font-dial text-5xl text-gold mb-6">{data.percentage}%</p>
+
+          {data.profile && (
+            <p className="text-parchment/50 text-sm mb-6">
+              <span className="text-gold font-medium">{data.profile.xpTotal} XP</span> total ·{" "}
+              {data.profile.quizzesCompleted} quiz{data.profile.quizzesCompleted !== 1 ? "zes" : ""} completed
+            </p>
+          )}
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-left border-t border-hairline pt-6">
             <div>

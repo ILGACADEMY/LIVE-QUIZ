@@ -7,6 +7,7 @@ import { supabaseBrowser } from "@/lib/supabase/client";
 import Toggle from "@/components/shared/Toggle";
 import QuestionEditor, { EditableQuestion, blankQuestion } from "@/components/admin/QuestionEditor";
 import ImportQuestionsModal from "@/components/admin/ImportQuestionsModal";
+import { buildQuizPptx } from "@/lib/quiz-pptx";
 
 const SPEED_WINDOWS = [5, 10, 15, 20, 30];
 const MAX_QUESTIONS = 50;
@@ -36,6 +37,31 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
   const [tab, setTab] = useState<Tab>("questions");
   const [activeIndex, setActiveIndex] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [exportingPptx, setExportingPptx] = useState(false);
+
+  async function handleExportPptx() {
+    if (!quiz || questions.length === 0) return;
+    setExportingPptx(true);
+    try {
+      const pres = await buildQuizPptx(
+        quiz.title,
+        questions.map((q) => ({
+          questionText: q.question_text,
+          imageUrl: q.image_url,
+          optionA: q.option_a,
+          optionB: q.option_b,
+          optionC: q.option_c,
+          optionD: q.option_d,
+          correctOption: q.correct_option,
+          explanation: q.explanation
+        }))
+      );
+      const safeTitle = quiz.title.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+      await pres.writeFile({ fileName: `Meridian_${safeTitle}.pptx` });
+    } finally {
+      setExportingPptx(false);
+    }
+  }
   const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [customWindow, setCustomWindow] = useState(false);
   const [customTimer, setCustomTimer] = useState(false);
@@ -630,13 +656,18 @@ export default function QuizEditor({ quizId }: { quizId: string }) {
 
       {/* STICKY SAVE BAR */}
       <div className="fixed bottom-0 left-0 right-0 bg-charcoal/95 backdrop-blur border-t border-hairline px-6 py-4">
-        <div className="max-w-6xl mx-auto flex items-center justify-end gap-3">
-          <button onClick={() => save(false)} disabled={saving} className="btn-ghost px-6 py-3">
-            {saving ? "Saving…" : "Save"}
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
+          <button onClick={handleExportPptx} disabled={exportingPptx || questions.length === 0} className="btn-ghost px-5 py-3 text-sm">
+            {exportingPptx ? "Building PowerPoint…" : "Export to PowerPoint"}
           </button>
-          <button onClick={() => save(true)} disabled={saving} className="btn-gold px-6 py-3">
-            {saving ? "Saving…" : "Save & publish"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button onClick={() => save(false)} disabled={saving} className="btn-ghost px-6 py-3">
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <button onClick={() => save(true)} disabled={saving} className="btn-gold px-6 py-3">
+              {saving ? "Saving…" : "Save & publish"}
+            </button>
+          </div>
         </div>
       </div>
 

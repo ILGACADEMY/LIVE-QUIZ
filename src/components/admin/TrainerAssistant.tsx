@@ -10,7 +10,7 @@ interface ChatMessage {
 const SUGGESTIONS = [
   "What are my biggest knowledge gaps?",
   "Which questions should I review or replace?",
-  "How did my most recent session go?"
+  "Compare my before-training and after-training sessions"
 ];
 
 export default function TrainerAssistant() {

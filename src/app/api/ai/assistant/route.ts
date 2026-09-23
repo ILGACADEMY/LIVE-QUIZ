@@ -2,7 +2,7 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getAdminSession, AdminSession } from "@/lib/admin-auth";
-import { listMyQuizzes, getKnowledgeGaps, getQuestionPerformance, getRecentSessions } from "@/lib/assistant-tools";
+import { listMyQuizzes, getKnowledgeGaps, getQuestionPerformance, getRecentSessions, compareSessions } from "@/lib/assistant-tools";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = "claude-sonnet-5";
@@ -50,6 +50,19 @@ const TOOLS: Anthropic.Tool[] = [
         limit: { type: "number", description: "Optional — how many recent sessions to return, default 10." }
       }
     }
+  },
+  {
+    name: "compare_sessions",
+    description:
+      "Compares two sessions of the SAME quiz, overall and per category — built for a before/after training design: run a quiz once before training, run it again right after, and see exactly what improved. Use get_recent_sessions first if you don't already have both session IDs. Use for questions like 'how much did training help' or 'compare this morning's session to this afternoon's'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        sessionIdBefore: { type: "string", description: "The earlier (pre-training) session's ID." },
+        sessionIdAfter: { type: "string", description: "The later (post-training) session's ID." }
+      },
+      required: ["sessionIdBefore", "sessionIdAfter"]
+    }
   }
 ];
 
@@ -73,6 +86,8 @@ async function executeTool(name: string, input: Record<string, unknown>, session
       return getQuestionPerformance(session, input.quizId as string);
     case "get_recent_sessions":
       return getRecentSessions(session, input.quizId as string | undefined, input.limit as number | undefined);
+    case "compare_sessions":
+      return compareSessions(session, input.sessionIdBefore as string, input.sessionIdAfter as string);
     default:
       return { error: `Unknown tool: ${name}` };
   }

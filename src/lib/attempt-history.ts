@@ -49,24 +49,65 @@ export async function recordAttemptHistory(sessionId: string): Promise<void> {
       const scorePercent = own.length > 0 ? Math.round((totalCorrect / own.length) * 100) : 0;
 
       return {
-        quiz_id: session.quiz_id,
-        quiz_title: session.quiz_snapshot.quiz.title,
-        participant_key: key,
-        participant_name: p.name,
-        category_breakdown: Object.values(categoryTally),
-        score_percent: scorePercent,
-        // The participant's OWN completed_at, not now() — this is what
-        // lets a later "strictly before this attempt" lookup correctly
-        // exclude this very row when the results page for THIS attempt
-        // queries its own history a moment later.
-        completed_at: p.completed_at
+        key,
+        name: p.name,
+        totalCorrect,
+        row: {
+          quiz_id: session.quiz_id,
+          quiz_title: session.quiz_snapshot.quiz.title,
+          participant_key: key,
+          participant_name: p.name,
+          category_breakdown: Object.values(categoryTally),
+          score_percent: scorePercent,
+          // The participant's OWN completed_at, not now() — this is what
+          // lets a later "strictly before this attempt" lookup correctly
+          // exclude this very row when the results page for THIS attempt
+          // queries its own history a moment later.
+          completed_at: p.completed_at
+        }
       };
     })
     .filter((r): r is NonNullable<typeof r> => r !== null);
 
   if (rows.length > 0) {
-    await supabaseAdmin.from("quiz_attempt_history").insert(rows);
+    await supabaseAdmin.from("quiz_attempt_history").insert(rows.map((r) => r.row));
   }
+
+  // Award XP and update each participant's persistent profile — the
+  // same participant_key already computed above, so identity stays
+  // consistent between the history record and the profile. A simple,
+  // transparent formula for a first version: 10 XP per correct answer,
+  // plus a flat 20 for finishing at all, rewarding real learning over
+  // time rather than in-session speed (which the leaderboard already
+  // rewards separately, within just that one session).
+  await Promise.all(
+    rows.map(async (r) => {
+      const { error } = await supabaseAdmin.rpc("upsert_participant_profile", {
+        p_key: r.key,
+        p_name: r.name,
+        p_xp_earned: r.totalCorrect * 10 + 20
+      });
+      if (error) console.error("upsert_participant_profile failed:", error.message);
+    })
+  );
+}
+
+/**
+ * A participant's persistent profile, for showing "you earned X XP,
+ * Y total" on their results page. Null if this quiz didn't collect
+ * mobile/email (no reliable identity), or genuinely hasn't finished
+ * processing yet (a brief race right at session-end — see the caller
+ * in the results route for how that's handled).
+ */
+export async function getParticipantProfile(participantKey: string | null): Promise<{ xpTotal: number; quizzesCompleted: number } | null> {
+  if (!participantKey) return null;
+  const { data } = await supabaseAdmin
+    .from("participant_profiles")
+    .select("xp_total, quizzes_completed")
+    .eq("participant_key", participantKey)
+    .maybeSingle();
+  if (!data) return null;
+  return { xpTotal: data.xp_total, quizzesCompleted: data.quizzes_completed };
 }
 
 /**

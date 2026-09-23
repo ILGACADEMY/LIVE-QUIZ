@@ -160,3 +160,38 @@ language sql
 as $$
   select nextval('certificate_number_seq');
 $$;
+-- provided mobile/email on join (an existing, admin-controlled per-quiz
+-- setting) — there's no reliable identity to build a profile around
+-- otherwise, and no profile should be created without someone knowingly
+-- giving that contact info first. Keyed on the same normalized
+-- mobile-or-email string already used by quiz_attempt_history, for
+-- consistency with the one existing precedent for "the same person
+-- across attempts."
+-- ---------------------------------------------------------------------------
+create table if not exists participant_profiles (
+  id                 uuid primary key default gen_random_uuid(),
+  participant_key    text not null unique,
+  display_name       text not null,
+  xp_total           int not null default 0,
+  quizzes_completed  int not null default 0,
+  created_at         timestamptz not null default now(),
+  last_active_at     timestamptz not null default now()
+);
+
+-- Atomic find-or-create-and-increment — a plain upsert with a static XP
+-- value would overwrite the running total instead of adding to it; this
+-- is what makes the increment safe even if this ever runs concurrently
+-- for the same person.
+create or replace function upsert_participant_profile(p_key text, p_name text, p_xp_earned int)
+returns void
+language sql
+as $$
+  insert into participant_profiles (participant_key, display_name, xp_total, quizzes_completed, last_active_at)
+  values (p_key, p_name, p_xp_earned, 1, now())
+  on conflict (participant_key)
+  do update set
+    display_name = excluded.display_name,
+    xp_total = participant_profiles.xp_total + excluded.xp_total,
+    quizzes_completed = participant_profiles.quizzes_completed + 1,
+    last_active_at = now();
+$$;

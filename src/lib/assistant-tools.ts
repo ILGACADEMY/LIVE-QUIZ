@@ -29,6 +29,78 @@ function ownedQuizFilter(session: AdminSession) {
   return session.role === "super_admin" ? null : session.userId;
 }
 
+/**
+ * Compares two sessions of the SAME quiz — built specifically for a
+ * before/after training design: run the quiz once before a training
+ * session, run it again right after, and see exactly what moved and
+ * what didn't, both overall and per category. Both sessions must
+ * belong to a quiz this user can access — checked independently, so
+ * one session_id lifted from somewhere else can't be used to peek at
+ * another user's data through this tool.
+ */
+export async function compareSessions(session: AdminSession, sessionIdBefore: string, sessionIdAfter: string) {
+  async function sessionSummary(sessionId: string) {
+    const { data: sessionRow } = await supabaseAdmin.from("sessions").select("id, quiz_id, started_at").eq("id", sessionId).maybeSingle();
+    if (!sessionRow) return { error: `Session ${sessionId} not found — it may have already been auto-deleted 24 hours after finishing.` };
+    if (!(await assertOwnsQuiz(session, sessionRow.quiz_id))) return { error: `Session ${sessionId} isn't accessible to you.` };
+
+    const { data: events } = await supabaseAdmin
+      .from("answer_events")
+      .select("category, is_correct")
+      .eq("session_id", sessionId);
+    if (!events || events.length === 0) {
+      return { error: `Session ${sessionId} has no recorded answers — it may not have actually run, or has already aged out.` };
+    }
+
+    const tally: Record<string, { category: string; correct: number; total: number }> = {};
+    for (const e of events) {
+      const cat = e.category || "General";
+      tally[cat] = tally[cat] || { category: cat, correct: 0, total: 0 };
+      tally[cat].total += 1;
+      if (e.is_correct) tally[cat].correct += 1;
+    }
+    const overallCorrect = events.filter((e) => e.is_correct).length;
+
+    return {
+      sessionId,
+      startedAt: sessionRow.started_at,
+      totalAnswers: events.length,
+      overallPercentCorrect: Math.round((overallCorrect / events.length) * 100),
+      categoryBreakdown: Object.values(tally).map((c) => ({ ...c, percentCorrect: Math.round((c.correct / c.total) * 100) }))
+    };
+  }
+
+  const [before, after] = await Promise.all([sessionSummary(sessionIdBefore), sessionSummary(sessionIdAfter)]);
+  if ("error" in before) return { error: `Before-session problem: ${before.error}` };
+  if ("error" in after) return { error: `After-session problem: ${after.error}` };
+
+  // Per-category deltas — matched by category name so "Materials went
+  // from 60% to 85%" is a direct, specific comparison, not just an
+  // overall number. A category present in only one session (e.g. the
+  // quiz was edited between the two runs) is reported as-is with no
+  // delta computed, rather than guessing at a comparison that isn't real.
+  const categoryDeltas = before.categoryBreakdown.map((b) => {
+    const match = after.categoryBreakdown.find((a) => a.category === b.category);
+    return {
+      category: b.category,
+      before: b.percentCorrect,
+      after: match?.percentCorrect ?? null,
+      change: match ? match.percentCorrect - b.percentCorrect : null
+    };
+  });
+
+  return {
+    before: { sessionId: before.sessionId, startedAt: before.startedAt, overallPercentCorrect: before.overallPercentCorrect, totalAnswers: before.totalAnswers },
+    after: { sessionId: after.sessionId, startedAt: after.startedAt, overallPercentCorrect: after.overallPercentCorrect, totalAnswers: after.totalAnswers },
+    overallChange: after.overallPercentCorrect - before.overallPercentCorrect,
+    categoryDeltas,
+    lowConfidenceWarning:
+      before.totalAnswers < 20 || after.totalAnswers < 20
+        ? "One or both sessions have fewer than 20 total answers — treat this comparison as a hint, not a firm conclusion."
+        : null
+  };
+}
+
 export async function listMyQuizzes(session: AdminSession) {
   let query = supabaseAdmin.from("quizzes").select("id, title, status, created_at").order("created_at", { ascending: false });
   const ownerId = ownedQuizFilter(session);

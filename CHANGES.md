@@ -2378,6 +2378,98 @@ block and footer below it.
 
 Files: `src/lib/certificate-pdf.ts`.
 
+## 89. Export a quiz to PowerPoint — the first of two PowerPoint directions
+
+Added "Export to PowerPoint" in the quiz editor's bottom bar. Generates
+a real, downloadable `.pptx` — a title slide, then one slide per
+question with all four options, the correct one marked, and the
+explanation shown beneath, in Meridian's own colors.
+
+**A scope note worth being direct about**: the other direction discussed
+— importing an existing PowerPoint's slides into a quiz as content
+pages between questions — depends on the separate "info pages" feature
+from a few updates back, which only got its backend safety work done
+(the database schema and the scoring-exclusion logic). Its actual
+editor UI (a way to create or edit a page) and its rendering on the
+live participant/presenter screens were never built. Import isn't
+something to build on top of that gap — info pages need finishing
+first, as their own focused piece, before import makes sense.
+
+**Verified end to end, not just checked for compile errors**: actually
+ran the real function with realistic question data (not a stub) and
+inspected the generated file's actual internal XML — confirmed the
+question text, all four options, the correct-answer marker landing on
+the right option, and the explanation text all appear exactly as
+intended, not just that a file of some size got produced.
+
+Files: `src/lib/quiz-pptx.ts` (new),
+`src/components/admin/QuizEditor.tsx`,
+`package.json` (added `pptxgenjs`).
+
+## 90. Persistent participant profiles — the foundation piece, built first on purpose
+
+The first concrete step toward the bigger "world's best" vision — and
+deliberately the foundational one, since XP, streaks, badges, a real
+"my progress" screen, and a proactive AI coach all need the same one
+thing underneath: a participant who persists as a real identity across
+sessions, not someone who exists only for the duration of one quiz.
+
+**The decision made, and why**: joining a quiz stays exactly as
+frictionless as it already is — no account, scan and go. A persistent
+profile only gets created for a participant on a quiz where "require
+mobile/email" is already switched on (an existing, admin-controlled
+setting) — nobody gets a profile without knowingly giving contact info
+first, and a quiz that doesn't collect it stays exactly as anonymous
+as it always has been.
+
+**What's real today**: a participant on one of those quizzes now earns
+XP (10 per correct answer, plus 20 for finishing) that accumulates
+permanently across every quiz they ever take, keyed on the same
+mobile-or-email identity the existing attempt-history system already
+uses — built as a genuine extension of that one working piece, not a
+parallel system. Their results page now shows their running total.
+Nothing else yet — no streaks, no badges, no dedicated profile screen
+— on purpose, since those are separate, later pieces of the same
+foundation, not this one.
+
+**A real mistake caught and fixed while building this**: an edit
+accidentally dropped the closing brace of the function this all hooks
+into, which would have broken every session-end and certificate flow
+in the app if it had shipped. Caught it by actually reading the file
+back after the edit rather than assuming it landed correctly, and
+confirmed the fix with a clean full-project compile afterward.
+
+Files: `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`,
+`src/lib/attempt-history.ts`,
+`src/app/api/sessions/[id]/results/route.ts`,
+`src/app/play/[sessionId]/results/page.tsx`.
+
+## 91. Before/after training comparison — a new Trainer Assistant capability
+
+Running the same quiz twice in one day — once before training, once
+right after — already worked with zero new code, since each launch is
+just an independent session of the same quiz template. What was
+missing was the comparison itself, so built that as a new tool in the
+Trainer Assistant: ask it to compare two sessions of the same quiz,
+and it reports the overall score change plus a per-category
+breakdown, so "did training actually work" gets a specific,
+grounded answer — not just an overall number, but exactly which
+topics genuinely improved and which didn't move at all.
+
+Both sessions are independently checked against quiz ownership before
+comparing, the same rule used everywhere else — one session ID lifted
+from somewhere else can't be used to peek at another user's data
+through this.
+
+**Verified with realistic before/after mock data before trusting it**:
+confirmed the overall percentage change computes correctly, and
+specifically confirmed a category showing genuine improvement and a
+different category staying flat both report the correct numbers —
+exactly the kind of result this feature exists to surface honestly.
+
+Files: `src/lib/assistant-tools.ts`, `src/app/api/ai/assistant/route.ts`,
+`src/components/admin/TrainerAssistant.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
