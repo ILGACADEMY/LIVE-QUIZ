@@ -443,3 +443,19 @@ as $$
     quizzes_completed = participant_profiles.quizzes_completed + 1,
     last_active_at = now();
 $$;
+
+-- ---------------------------------------------------------------------------
+-- Security fix: these four tables were missing "enable row level
+-- security" entirely, unlike every other table in this schema. Enabled
+-- with zero policies — the same pattern already used successfully on
+-- every other table here — which means default-deny for the public
+-- anon key (the only key ever exposed to the browser), while the
+-- server's service-role key (used exclusively in API routes) is
+-- unaffected, since it bypasses RLS by design. No application code
+-- changes needed since nothing in this app ever queries these tables
+-- via the anon key in the first place.
+-- ---------------------------------------------------------------------------
+alter table app_settings enable row level security;
+alter table trainers enable row level security;
+alter table answer_events enable row level security;
+alter table participant_profiles enable row level security;

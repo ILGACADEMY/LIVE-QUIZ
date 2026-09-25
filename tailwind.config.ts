@@ -12,6 +12,7 @@ const config: Config = {
         parchment: "#DCD3BF",
         gold: "#C9A24B",
         "gold-dim": "#8A6E33",
+        "presenter-cream": "#FDFAF3",
         bronze: "#8A5A32",
         crimson: "#8C3B2E",
         sapphire: "#3E5C76",

@@ -2470,6 +2470,137 @@ exactly the kind of result this feature exists to surface honestly.
 Files: `src/lib/assistant-tools.ts`, `src/app/api/ai/assistant/route.ts`,
 `src/components/admin/TrainerAssistant.tsx`.
 
+## 92. Security audit fixes, part 1 — the two safe, immediate ones
+
+From the full security audit: the two highest-value fixes that carry
+zero risk of breaking the live app, done first on purpose while the
+riskier ones get their own careful treatment.
+
+**RLS enabled on 4 tables that were missing it entirely**:
+`app_settings`, `trainers`, `answer_events`, `participant_profiles` —
+every other table in this schema already had it, these four were a
+genuine gap. The most serious part: `participant_profiles` stores real
+phone numbers/emails in plain text, and without RLS, anyone who
+extracted the public anon key from the browser (trivial — it's meant
+to be public) could have queried Supabase's REST API directly and
+pulled that data, completely bypassing the app itself. Enabled with
+zero policies, the same safe pattern already used everywhere else here
+— no application code needed to change, since nothing in this app ever
+queries these tables via the anon key in the first place.
+
+**Added the `.gitignore` file that never existed.** This project had
+none at all — meaning nothing stopped `node_modules`, build output, or
+a future local `.env.local` (which holds the real Supabase/Anthropic/
+admin secrets) from being accidentally committed. Now excluded
+properly, closing that risk going forward.
+
+**Deliberately not touched yet, and why**: the Next.js version itself
+has real, serious CVEs (including two rated critical), but fixing that
+means jumping from Next 14 to Next 16 — a genuine breaking change.
+Next 15 made `cookies()` asynchronous, which this codebase calls
+synchronously in several places (`admin-auth.ts` and everywhere that
+uses `requireAdmin()`) — upgrading means finding and fixing every one
+of those call sites carefully, not a quick dependency bump. Rushing
+that in the same pass as these two safe fixes risked breaking the live
+tool your staff actually use. Treating it as its own, separate,
+carefully-tested piece of work instead.
+
+Files: `supabase/schema.sql`, `supabase/upgrade_existing_database.sql`,
+`.gitignore` (new).
+
+## 93. Next.js upgraded to 16 — the critical security fix, done carefully
+
+The most serious finding from the security audit: Next.js 14.2.35 had
+known CVEs including two rated critical (unauthenticated RCE in the
+Image Optimization API, among others). Upgraded to Next 16.3.6 —
+confirmed via `npm audit` this is genuinely the first version clear of
+every CVE in the vulnerable range, not just a bump to "newer."
+
+**The real work wasn't the version number — it was everywhere `params`
+gets used.** Next 15+ made route params, page params, and
+`searchParams` all asynchronous (officially confirmed against Next's
+own migration documentation, not assumed). Found and fixed this across
+**26 function signatures in 22 files** — every API route handler,
+every dynamic admin page, and every participant-facing page
+(`/play`, `/join`, `/leaderboard`, `/results`). Also fixed the
+`cookies()` call in `admin-auth.ts` (already flagged by the compiler)
+and propagated the resulting `async` requirement through
+`requireAdmin()` and all 6 of its callers.
+
+**Worth being honest about a real risk I caught mid-way through**:
+this app writes its own `{ params }` type annotations rather than
+importing Next.js's own types for them — which means TypeScript
+literally cannot detect a mismatch between what the app expects and
+what Next.js actually provides at runtime. The compiler stayed clean
+throughout, but clean compilation alone would NOT have caught this —
+confirmed this specific risk against Next's own official migration
+guide before trusting anything, rather than assuming a passing
+`tsc --noEmit` meant the app was actually fixed. That check is exactly
+what caught a second, separate miss: `src/app/play/[sessionId]/results/page.tsx`
+uses a multi-line prop signature that my first, narrower search pattern
+missed entirely — found only by deliberately re-checking more broadly
+for `searchParams` usage app-wide, not by trusting the first pass.
+
+**Two dependency vulnerabilities fixed as part of the same pass**,
+since I already had working verification tests for both features from
+earlier in this project: `jspdf` upgraded 2.5.2 → 4.2.1 (fixes a
+critical-rated dompurify-related issue) and `pptxgenjs` upgraded
+3.12.0 → 4.0.1 (fixes one of two flagged issues). Re-ran the actual
+certificate-generation and PowerPoint-export verification scripts
+afterward — both confirmed producing byte-valid files with fully
+correct content, not just "no error thrown."
+
+**One remaining, honestly-disclosed limitation**: `pptxgenjs` 4.0.1 —
+the latest version that exists — still depends internally on an old,
+technically-vulnerable `image-size` version for measuring embedded
+images. This can't be fixed from this app's side without an
+unsupported, riskier workaround; the practical exposure is low, since
+the vulnerability only triggers on malicious ICNS/JXL/HEIF files, and
+this app only ever embeds JPG/PNG images admins themselves uploaded
+through the app's own upload flow — not arbitrary files from an
+untrusted source.
+
+Total remaining `npm audit` findings: down from 6 (2 critical, 3 high,
+1 moderate) to 2 (both high, the upstream-blocked one above).
+
+Files touched: `package.json`, `src/lib/admin-auth.ts`,
+`src/lib/require-admin.ts`, and all 22 files listed above.
+
+## 94. Presenter's big screen — background changed to cream/ivory
+
+Changed the live, projected presenter view (`PresentationView.tsx`) —
+the screen shown on a TV/projector during an actual session — from
+dark charcoal to cream, matching the certificate's tone for brand
+consistency. Deliberately scoped to just this one screen rather than
+the whole app: the color palette elsewhere is shared, interconnected
+variables (dark background paired with light text throughout), and
+changing those would have touched the admin dashboard too and broken
+readability across many screens that weren't part of this request.
+Added one new color (`presenter-cream`) rather than touching the
+shared ones, so nothing else in the app is affected.
+
+**A real mistake caught mid-way through, not after**: two child
+components rendered inside this view (the countdown timer, the live
+answer-distribution bars) are also used elsewhere in the still-dark
+admin dashboard — recoloring them directly would have broken that
+screen. Gave each an optional `theme` prop instead, defaulting to the
+existing dark colors, so the dashboard needs zero changes and only
+this one screen opts into cream.
+
+**A second mistake caught immediately by re-reading the file itself**:
+built one of the theme variants using a dynamically-constructed class
+name (`` `bg-${variable}` ``) — the exact pattern a comment already
+sitting at the top of that same file explicitly warns against, since
+Tailwind's build-time scanner only detects full, literal class strings
+and silently fails to generate CSS for anything assembled at runtime.
+Caught by re-reading my own change against that comment rather than
+assuming it was fine, and rewrote it as plain literal strings per
+branch.
+
+Files: `tailwind.config.ts`, `src/components/admin/PresentationView.tsx`,
+`src/components/admin/PresenterTimer.tsx`,
+`src/components/admin/ResponseDistributionChart.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
