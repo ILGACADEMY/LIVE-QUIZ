@@ -27,9 +27,25 @@ interface DistributionEntry {
  *     change animates, same as the height does), rather than just
  *     appending a static label the way a plain list would.
  */
-export default function ResponseDistributionChart({ options, distribution, correctOption }: { options: Option[]; distribution?: DistributionEntry[]; correctOption?: "A" | "B" | "C" | "D" }) {
+export default function ResponseDistributionChart({
+  options,
+  distribution,
+  correctOption,
+  theme = "dark"
+}: {
+  options: Option[];
+  distribution?: DistributionEntry[];
+  correctOption?: "A" | "B" | "C" | "D";
+  theme?: "dark" | "cream";
+}) {
   const counts = options.map((opt) => distribution?.find((d) => d.key === opt.key)?.count ?? 0);
   const maxCount = Math.max(1, ...counts);
+  const cream = theme === "cream";
+  const goldBg = cream ? "bg-gold-dim" : "bg-gold";
+  const goldText = cream ? "text-gold-dim" : "text-gold";
+  const normalCountColor = cream ? "text-charcoal" : "text-ivory";
+  const mutedColor = cream ? "text-charcoal/50" : "text-parchment/50";
+  const optionTextColor = cream ? "text-charcoal/80" : "text-parchment/80";
 
   return (
     <div className="flex items-end justify-center gap-6 md:gap-10 h-64 md:h-72 mb-4 px-2">
@@ -41,27 +57,27 @@ export default function ResponseDistributionChart({ options, distribution, corre
         // A sliver is still shown at 0 votes so every bar (and its label)
         // stays visible and comparable, rather than collapsing to nothing.
         const heightPercent = count > 0 ? Math.max(10, (count / maxCount) * 100) : 4;
-        const colorClass = isCorrect ? "bg-gold" : BAR_COLOR_CLASSES[i % BAR_COLOR_CLASSES.length];
+        const colorClass = isCorrect ? goldBg : BAR_COLOR_CLASSES[i % BAR_COLOR_CLASSES.length];
 
         return (
           <div key={opt.key} className="flex flex-col items-center justify-end h-full flex-1 max-w-[220px]">
             <div className="flex items-center gap-2 mb-2">
-              <span className={`font-dial text-5xl transition-colors duration-500 ${isCorrect ? "text-gold" : "text-ivory"}`}>{count}</span>
+              <span className={`font-dial text-5xl transition-colors duration-500 ${isCorrect ? goldText : normalCountColor}`}>{count}</span>
               {isCorrect && (
-                <span className="w-8 h-8 rounded-full bg-gold text-charcoal flex items-center justify-center text-lg font-bold shrink-0">
+                <span className={`w-8 h-8 rounded-full ${goldBg} text-charcoal flex items-center justify-center text-lg font-bold shrink-0`}>
                   ✓
                 </span>
               )}
             </div>
-            {distribution && <span className="text-parchment/50 text-base mb-2">{percent}%</span>}
+            {distribution && <span className={`${mutedColor} text-base mb-2`}>{percent}%</span>}
             <div className="w-full flex items-end justify-center" style={{ height: "100%" }}>
               <div
                 className={`w-full rounded-t-sm transition-all duration-700 ease-out ${colorClass}`}
                 style={{ height: `${heightPercent}%` }}
               />
             </div>
-            <p className="text-base text-center mt-3 text-parchment/80 leading-snug">
-              <span className="text-parchment/50 mr-1.5 font-medium">{opt.key}</span>
+            <p className={`text-base text-center mt-3 ${optionTextColor} leading-snug`}>
+              <span className={`${mutedColor} mr-1.5 font-medium`}>{opt.key}</span>
               {opt.text}
             </p>
           </div>

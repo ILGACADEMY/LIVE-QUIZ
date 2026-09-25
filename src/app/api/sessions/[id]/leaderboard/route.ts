@@ -22,7 +22,8 @@ import { countScoredQuestions } from "@/lib/types";
 // hundreds of people) plus, for top10, this participant's own rank if
 // supplied. Only an authenticated admin request gets ranks 11+ on the
 // individual view and per-participant score breakdown.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const participantId = req.nextUrl.searchParams.get("participantId");
   const wantsAdmin = req.nextUrl.searchParams.get("admin") === "1";
   const view = req.nextUrl.searchParams.get("view") ?? "top10";

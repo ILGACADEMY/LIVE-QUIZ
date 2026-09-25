@@ -6,7 +6,8 @@ import { broadcastSessionEvent } from "@/lib/realtime";
 // POST /api/sessions/:id/delete — immediate purge, ahead of the 24h auto
 // deletion. Cascades remove participants + answers. The quiz template is
 // untouched (spec §36).
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

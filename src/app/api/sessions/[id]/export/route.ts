@@ -34,7 +34,8 @@ function csvResponse(csv: string, filename: string) {
 // used to mean the export came back completely empty in either of those
 // completely normal situations. Every participant who joined is included
 // now, exactly like the on-screen "Full ranking" table.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

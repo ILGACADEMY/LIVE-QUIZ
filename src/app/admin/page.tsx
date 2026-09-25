@@ -6,9 +6,9 @@ import StorageConnectionTest from "@/components/admin/StorageConnectionTest";
 import BrandingSettings from "@/components/admin/BrandingSettings";
 import LogoutButton from "@/components/admin/LogoutButton";
 
-export default function AdminHome() {
-  requireAdmin();
-  const session = getAdminSessionFromCookies();
+export default async function AdminHome() {
+  await requireAdmin();
+  const session = await getAdminSessionFromCookies();
   return (
     <main className="min-h-screen px-6 py-10 md:px-12">
       <div className="max-w-5xl mx-auto">

@@ -184,7 +184,8 @@ async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
 // With participantId → that one shared question (or the reveal, or
 // waiting/finished), same for everyone, plus this participant's own
 // answered/not-yet-answered status for it.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const participantId = req.nextUrl.searchParams.get("participantId");
 
   const { data: rawSession, error } = await supabaseAdmin

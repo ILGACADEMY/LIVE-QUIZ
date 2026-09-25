@@ -8,7 +8,8 @@ import { countScoredQuestions } from "@/lib/types";
 // POST /api/sessions/:id/end — "END QUIZ" (spec §23). Session data (spec
 // §35) is retained for 24h from this moment for the admin to review
 // results/leaderboard, then auto-deleted. Use /delete to purge sooner.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

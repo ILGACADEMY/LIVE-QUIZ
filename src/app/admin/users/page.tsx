@@ -2,9 +2,9 @@ import { requireAdmin } from "@/lib/require-admin";
 import { getAdminSessionFromCookies } from "@/lib/admin-auth";
 import ManageUsers from "@/components/admin/ManageUsers";
 
-export default function ManageUsersPage() {
-  requireAdmin();
-  const session = getAdminSessionFromCookies();
+export default async function ManageUsersPage() {
+  await requireAdmin();
+  const session = await getAdminSessionFromCookies();
 
   if (session?.role !== "super_admin") {
     return (

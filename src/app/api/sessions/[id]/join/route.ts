@@ -36,7 +36,8 @@ function normalizeEmail(raw: string): string {
 // require_contact_info is off and neither was provided, there's nothing
 // to match against — duplicate prevention simply doesn't apply for that
 // quiz, which is the accepted tradeoff of leaving the setting off.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const { name, store, city, mobile, email, language, avatar: requestedAvatar } = await req.json();
 
   const trimmedName = typeof name === "string" ? name.trim() : "";

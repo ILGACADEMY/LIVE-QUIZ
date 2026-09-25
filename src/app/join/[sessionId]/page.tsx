@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { detectSupportedLanguage } from "@/lib/languages";
 import LanguagePicker from "@/components/participant/LanguagePicker";
 import { AVATARS, randomAvatar } from "@/lib/avatars";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
 
-export default function JoinPage({ params }: { params: { sessionId: string } }) {
+export default function JoinPage({ params: paramsPromise }: { params: Promise<{ sessionId: string }> }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const [name, setName] = useState("");
   const [store, setStore] = useState("");

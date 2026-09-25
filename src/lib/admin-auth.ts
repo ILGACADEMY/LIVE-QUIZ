@@ -96,12 +96,13 @@ export function isSuperAdminRequest(req: NextRequest): boolean {
 }
 
 /** For server components/actions (cookies()-based, no request object). */
-export function getAdminSessionFromCookies(): AdminSession | null {
-  return decodeSession(cookies().get(COOKIE_NAME)?.value);
+export async function getAdminSessionFromCookies(): Promise<AdminSession | null> {
+  const cookieStore = await cookies();
+  return decodeSession(cookieStore.get(COOKIE_NAME)?.value);
 }
 
-export function isAdminSessionAuthorized(): boolean {
-  return getAdminSessionFromCookies() !== null;
+export async function isAdminSessionAuthorized(): Promise<boolean> {
+  return (await getAdminSessionFromCookies()) !== null;
 }
 
 export { COOKIE_NAME };

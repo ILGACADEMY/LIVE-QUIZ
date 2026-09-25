@@ -4,7 +4,8 @@ import { getAdminSession } from "@/lib/admin-auth";
 import { toQuestionRow } from "@/lib/question-fields";
 
 // POST /api/quizzes/:id/duplicate — independent copy of quiz + all questions.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

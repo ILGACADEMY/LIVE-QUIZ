@@ -11,7 +11,8 @@ const VALID_OPTIONS: OptionKey[] = ["A", "B", "C", "D"];
 // from the SESSION's current_question_started_at (shared by everyone),
 // not a per-participant timestamp — matching the presenter-controlled
 // model where one question is live for the whole room at once.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const receivedAt = Date.now();
   const { participantId, questionIndex, selectedOption } = await req.json();
 

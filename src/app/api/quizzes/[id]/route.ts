@@ -13,7 +13,8 @@ function canAccess(session: { role: string; userId: string | null }, ownerId: st
 }
 
 // GET /api/quizzes/:id — quiz + full question list, for the editor/preview
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -39,7 +40,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 // The Question Builder always sends the complete question array (max 50,
 // spec §6); we replace-in-place by order_index rather than diffing, which
 // keeps "no coding, no JSON editing" simple for the admin UI to implement.
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -82,7 +84,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/quizzes/:id
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

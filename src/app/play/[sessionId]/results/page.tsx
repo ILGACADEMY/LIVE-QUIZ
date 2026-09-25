@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { jsPDF } from "jspdf";
 import { buildCertificatePdf, safeFilename } from "@/lib/certificate-pdf";
 import ScoreCircle from "@/components/participant/ScoreCircle";
@@ -54,12 +54,14 @@ function formatTime(seconds: number | null) {
 }
 
 export default function ResultsPage({
-  params,
-  searchParams
+  params: paramsPromise,
+  searchParams: searchParamsPromise
 }: {
-  params: { sessionId: string };
-  searchParams: { participantId?: string };
+  params: Promise<{ sessionId: string }>;
+  searchParams: Promise<{ participantId?: string }>;
 }) {
+  const params = use(paramsPromise);
+  const searchParams = use(searchParamsPromise);
   const participantId = searchParams.participantId;
   const [data, setData] = useState<ResultsData | null>(null);
   const [rank, setRank] = useState<number | null>(null);

@@ -17,7 +17,8 @@ import { generateCertificateNumber } from "@/lib/certificate-id";
 // Idempotent: calling this again for the same participant returns the
 // SAME certificate (looked up by session_id+participant_id, unique in
 // the table) rather than ever generating a second one.
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const participantId = req.nextUrl.searchParams.get("participantId");
   if (!participantId) return NextResponse.json({ error: "participantId is required" }, { status: 400 });
 

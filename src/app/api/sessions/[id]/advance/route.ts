@@ -32,7 +32,8 @@ import { LiveSession } from "@/lib/types";
 // revealed step only) automatically once the per-question deadline
 // passes, handled by the self-healing check in the state route rather
 // than here.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

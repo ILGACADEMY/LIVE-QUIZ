@@ -7,7 +7,8 @@ import { getAdminSession, hashPassword } from "@/lib/admin-auth";
 // changing. This is the "I get to change the password" route: the
 // super admin can reset anyone's password at any time, no email or
 // confirmation link involved — hand them the new one directly.
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session || session.role !== "super_admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -43,7 +44,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 // than being deleted with them — see the owner_id column comment in
 // the schema. A super admin can't delete their own account this way
 // (guards against ever locking everyone out of user management).
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const session = getAdminSession(req);
   if (!session || session.role !== "super_admin") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

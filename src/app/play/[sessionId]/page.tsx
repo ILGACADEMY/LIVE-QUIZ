@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { OptionKey } from "@/lib/types";
 import AnswerGrid from "@/components/participant/AnswerGrid";
@@ -38,7 +38,8 @@ interface RevealState {
   isCorrect: boolean | null; // null = they didn't answer in time
 }
 
-export default function PlayPage({ params }: { params: { sessionId: string } }) {
+export default function PlayPage({ params: paramsPromise }: { params: Promise<{ sessionId: string }> }) {
+  const params = use(paramsPromise);
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("loading");
   const [participantId, setParticipantId] = useState<string | null>(null);

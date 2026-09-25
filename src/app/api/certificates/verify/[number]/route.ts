@@ -12,7 +12,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
  * If what's printed on a certificate doesn't match what this returns,
  * that's the tamper signal.
  */
-export async function GET(req: NextRequest, { params }: { params: { number: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ number: string }> }) {
+  const params = await paramsPromise;
   const { data, error } = await supabaseAdmin
     .from("certificates")
     .select("certificate_number, quiz_title, participant_name, score_percent, issued_at")

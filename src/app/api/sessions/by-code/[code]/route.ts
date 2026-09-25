@@ -5,7 +5,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 // Public — this is the whole point of the code, someone types it with no
 // login. Only matches an active (non-finished) session, same scope as the
 // uniqueness constraint on short_code itself.
-export async function GET(_req: NextRequest, { params }: { params: { code: string } }) {
+export async function GET(_req: NextRequest, { params: paramsPromise }: { params: Promise<{ code: string }> }) {
+  const params = await paramsPromise;
   const code = params.code.replace(/\D/g, ""); // tolerate spaces/dashes if someone types it that way
 
   const { data: session, error } = await supabaseAdmin

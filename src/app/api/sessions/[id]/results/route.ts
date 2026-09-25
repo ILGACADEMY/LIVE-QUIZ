@@ -10,7 +10,8 @@ const OPTION_FIELD = { A: "option_a", B: "option_b", C: "option_c", D: "option_d
 // GET /api/sessions/:id/results?participantId=...
 // Only shown once the participant has finished — correctness and the
 // answer key are withheld until then (spec §13, §28).
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const participantId = req.nextUrl.searchParams.get("participantId");
   if (!participantId) return NextResponse.json({ error: "participantId is required" }, { status: 400 });
 

@@ -59,7 +59,7 @@ export default function PresentationView({
   const advanceLabel = phase === "question" ? "Reveal answer" : isLastQuestion ? "End quiz" : "Next question";
 
   return (
-    <div className="fixed inset-0 bg-charcoal flex flex-col items-center px-[4vw] py-[3vh] overflow-hidden">
+    <div className="fixed inset-0 bg-presenter-cream text-charcoal flex flex-col items-center px-[4vw] py-[3vh] overflow-hidden">
       {/* Small, deliberately unobtrusive — this is a control bar for the
           presenter, not something the room's attention should go to. */}
       <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
@@ -67,17 +67,17 @@ export default function PresentationView({
           <button
             onClick={onAdvance}
             disabled={busy}
-            className="text-xs px-3 py-1.5 border border-hairline text-parchment/60 hover:text-gold hover:border-gold bg-charcoal/60"
+            className="text-xs px-3 py-1.5 border border-gold-dim/40 text-charcoal/60 hover:text-gold-dim hover:border-gold-dim bg-presenter-cream/60"
           >
             {advanceLabel}
           </button>
         ) : (
-          <span className="text-xs px-3 py-1.5 text-parchment/30">Ending automatically…</span>
+          <span className="text-xs px-3 py-1.5 text-charcoal/30">Ending automatically…</span>
         )}
         <button
           onClick={onEndQuiz}
           disabled={busy}
-          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-crimson hover:border-crimson bg-charcoal/60"
+          className="text-xs px-3 py-1.5 border border-gold-dim/40 text-charcoal/40 hover:text-crimson hover:border-crimson bg-presenter-cream/60"
         >
           End quiz
         </button>
@@ -85,30 +85,30 @@ export default function PresentationView({
           href={`/leaderboard/${sessionId}`}
           target="_blank"
           rel="noreferrer"
-          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-gold hover:border-gold bg-charcoal/60"
+          className="text-xs px-3 py-1.5 border border-gold-dim/40 text-charcoal/40 hover:text-gold-dim hover:border-gold-dim bg-presenter-cream/60"
         >
           Leaderboard
         </a>
         <button
           onClick={onExit}
-          className="text-xs px-3 py-1.5 border border-hairline text-parchment/40 hover:text-gold hover:border-gold bg-charcoal/60"
+          className="text-xs px-3 py-1.5 border border-gold-dim/40 text-charcoal/40 hover:text-gold-dim hover:border-gold-dim bg-presenter-cream/60"
         >
           Exit
         </button>
       </div>
 
-      <p className="text-gold tracking-[0.3em]" style={{ fontSize: "clamp(0.8rem, 1.2vw, 1.1rem)" }}>
+      <p className="text-gold-dim tracking-[0.3em]" style={{ fontSize: "clamp(0.8rem, 1.2vw, 1.1rem)" }}>
         MERIDIAN
       </p>
-      <p className="text-parchment/60 mt-1 mb-[2vh] text-center" style={{ fontSize: "clamp(1rem, 1.6vw, 1.5rem)" }}>
+      <p className="text-charcoal/60 mt-1 mb-[2vh] text-center" style={{ fontSize: "clamp(1rem, 1.6vw, 1.5rem)" }}>
         {quizTitle}
       </p>
 
-      <p className="font-dial text-parchment/50 mb-[2vh]" style={{ fontSize: "clamp(1rem, 1.8vw, 1.6rem)" }}>
+      <p className="font-dial text-charcoal/50 mb-[2vh]" style={{ fontSize: "clamp(1rem, 1.8vw, 1.6rem)" }}>
         QUESTION {String(questionNumber).padStart(2, "0")} / {totalQuestions}
       </p>
 
-      {phase === "question" && <PresenterTimer phaseDeadline={phaseDeadline} />}
+      {phase === "question" && <PresenterTimer phaseDeadline={phaseDeadline} theme="cream" />}
 
       <h1
         className="font-display italic text-center mb-[3vh] max-w-[85vw]"
@@ -130,10 +130,10 @@ export default function PresentationView({
 
       {phase === "revealed" ? (
         <div className="w-full max-w-[70vw]">
-          <ResponseDistributionChart options={question.options} distribution={question.distribution} correctOption={question.correctOption} />
+          <ResponseDistributionChart options={question.options} distribution={question.distribution} correctOption={question.correctOption} theme="cream" />
           {question.explanation && (
             <p
-              className="text-parchment/70 text-center mt-[2vh] max-w-[60vw] mx-auto"
+              className="text-charcoal/70 text-center mt-[2vh] max-w-[60vw] mx-auto"
               style={{ fontSize: "clamp(0.85rem, 1.3vw, 1.15rem)", lineHeight: 1.5 }}
             >
               {question.explanation}
@@ -145,10 +145,10 @@ export default function PresentationView({
           {question.options.map((opt) => (
             <div
               key={opt.key}
-              className="border border-hairline px-[2vw] py-[1.8vh] text-left"
+              className="border border-gold-dim/30 px-[2vw] py-[1.8vh] text-left"
               style={{ fontSize: "clamp(1rem, 1.6vw, 1.6rem)" }}
             >
-              <span className="text-gold mr-3">{opt.key}</span>
+              <span className="text-gold-dim mr-3">{opt.key}</span>
               {opt.text}
             </div>
           ))}
@@ -159,7 +159,7 @@ export default function PresentationView({
         {Array.from({ length: totalQuestions }).map((_, i) => (
           <span
             key={i}
-            className={`h-1.5 rounded-full transition-all ${i < questionNumber ? "bg-gold w-6" : "bg-hairline w-3"}`}
+            className={`h-1.5 rounded-full transition-all ${i < questionNumber ? "bg-gold-dim w-6" : "bg-gold-dim/20 w-3"}`}
           />
         ))}
       </div>

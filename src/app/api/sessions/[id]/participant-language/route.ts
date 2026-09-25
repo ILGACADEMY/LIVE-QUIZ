@@ -12,7 +12,8 @@ import { ensureQuestionTranslated } from "@/lib/question-translation-cache";
 // the very next poll, no rejoin needed. Same server-side enforcement as
 // at join: if this quiz doesn't have translation turned on, the request
 // is rejected outright rather than silently accepted and ignored.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const { participantId, language } = await req.json();
   if (!participantId || typeof participantId !== "string") {
     return NextResponse.json({ error: "participantId is required" }, { status: 400 });

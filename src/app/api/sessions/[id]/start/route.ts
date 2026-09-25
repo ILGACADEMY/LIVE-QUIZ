@@ -13,7 +13,8 @@ const COUNTDOWN_SECONDS_WITH_TRANSLATION = 6; // extra safety margin on top of p
 // puts question 0 live for EVERY participant at once, with a shared
 // server-side deadline — not just flipping status and letting each
 // participant free-run from there.
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isAdminRequestAuthorized(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

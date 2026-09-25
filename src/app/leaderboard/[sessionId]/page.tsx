@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import MeridianWordmark from "@/components/shared/MeridianWordmark";
 import { useFullscreen } from "@/lib/useFullscreen";
@@ -27,7 +27,8 @@ type View = "top10" | "byCity" | "byStore";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
 
-export default function LeaderboardPage({ params }: { params: { sessionId: string } }) {
+export default function LeaderboardPage({ params: paramsPromise }: { params: Promise<{ sessionId: string }> }) {
+  const params = use(paramsPromise);
   const [view, setView] = useState<View>("top10");
   const [top10, setTop10] = useState<Row[]>([]);
   const [teamRanking, setTeamRanking] = useState<TeamRow[]>([]);

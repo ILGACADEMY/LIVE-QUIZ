@@ -13,7 +13,7 @@ import { useEffect, useState } from "react";
  * having already answered — happens on the server's own schedule, this
  * component only ever displays what's already true).
  */
-export default function PresenterTimer({ phaseDeadline }: { phaseDeadline: string | null }) {
+export default function PresenterTimer({ phaseDeadline, theme = "dark" }: { phaseDeadline: string | null; theme?: "dark" | "cream" }) {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
 
   useEffect(() => {
@@ -31,16 +31,13 @@ export default function PresenterTimer({ phaseDeadline }: { phaseDeadline: strin
   if (secondsLeft === null) return null;
 
   const urgent = secondsLeft <= 8;
+  const normalColor = theme === "cream" ? "text-charcoal/70" : "text-parchment/70";
 
   return (
     <div className="flex items-center justify-center py-4">
       <span
         key={urgent ? secondsLeft : "normal"} // remount each urgent tick to restart the CSS animation
-        className={
-          urgent
-            ? "font-dial text-8xl md:text-9xl text-crimson animate-[timerPulse_1s_ease-out]"
-            : "font-dial text-4xl text-parchment/70"
-        }
+        className={urgent ? "font-dial text-8xl md:text-9xl text-crimson animate-[timerPulse_1s_ease-out]" : `font-dial text-4xl ${normalColor}`}
       >
         {secondsLeft}
       </span>

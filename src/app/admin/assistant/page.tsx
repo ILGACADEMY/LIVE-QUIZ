@@ -1,8 +1,8 @@
 import { requireAdmin } from "@/lib/require-admin";
 import TrainerAssistant from "@/components/admin/TrainerAssistant";
 
-export default function AssistantPage() {
-  requireAdmin();
+export default async function AssistantPage() {
+  await requireAdmin();
   return (
     <main className="min-h-screen px-6 py-10 md:px-12">
       <div className="max-w-3xl mx-auto">
