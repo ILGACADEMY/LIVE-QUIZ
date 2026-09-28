@@ -108,8 +108,6 @@ export default function PresentationView({
         QUESTION {String(questionNumber).padStart(2, "0")} / {totalQuestions}
       </p>
 
-      {phase === "question" && <PresenterTimer phaseDeadline={phaseDeadline} theme="cream" />}
-
       <h1
         className="font-display italic text-center mb-[3vh] max-w-[85vw]"
         style={{ fontSize: "clamp(1.6rem, 3.2vw, 3.2rem)", lineHeight: 1.25 }}
@@ -154,6 +152,8 @@ export default function PresentationView({
           ))}
         </div>
       )}
+
+      {phase === "question" && <PresenterTimer phaseDeadline={phaseDeadline} theme="cream" />}
 
       <div className="mt-auto pt-[2vh] w-full flex items-center justify-center gap-2">
         {Array.from({ length: totalQuestions }).map((_, i) => (

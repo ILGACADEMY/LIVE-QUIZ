@@ -441,21 +441,23 @@ export async function GET(req: NextRequest, { params: paramsPromise }: { params:
   }
 
   // phase === 'revealed'
-  // Participants get ONLY a correct/incorrect verdict here — no correct
-  // answer text, no explanation, no question content at all. The full
-  // breakdown (their answer, the correct one, the admin's explanation,
-  // and AI feedback if enabled) is available afterward on the results/
-  // download page (GET /api/sessions/:id/results), never mid-quiz on a
-  // phone. This is also why the question/explanation fields aren't
-  // fetched or localized here anymore — nothing to translate if nothing
-  // is sent.
+  // Was deliberately minimal before (correct/incorrect only) so the full
+  // breakdown lived only on the shared presenter screen. Now sends the
+  // full picture here too — question text and options (localized the
+  // same way the "question" phase already is, via toLocalizedQuestion),
+  // the participant's own pick, the correct answer, and the explanation
+  // — so someone reviewing on their own phone right after answering sees
+  // the same detail the room sees together on the big screen.
   const { data: ownAnswer } = await supabaseAdmin
     .from("answers")
-    .select("is_correct")
+    .select("is_correct, selected_option")
     .eq("session_id", params.id)
     .eq("participant_id", participantId)
     .eq("question_index", index)
     .maybeSingle();
+
+  const rawQuestion = session.quiz_snapshot.questions[index];
+  const localized = await toLocalizedQuestion(session, index, participant.language ?? "en");
 
   return NextResponse.json({
     status: "live",
@@ -463,6 +465,13 @@ export async function GET(req: NextRequest, { params: paramsPromise }: { params:
     questionNumber: index + 1,
     totalQuestions,
     isCorrect: ownAnswer?.is_correct ?? null, // null = they didn't answer in time
-    answeredSoFar
+    selectedOption: ownAnswer?.selected_option ?? null,
+    answeredSoFar,
+    questionText: localized?.question_text ?? null,
+    options: localized
+      ? { A: localized.option_a, B: localized.option_b, C: localized.option_c, D: localized.option_d }
+      : null,
+    correctOption: rawQuestion?.correct_option ?? null,
+    explanation: rawQuestion?.explanation ?? null
   });
 }

@@ -31,13 +31,16 @@ export default function PresenterTimer({ phaseDeadline, theme = "dark" }: { phas
   if (secondsLeft === null) return null;
 
   const urgent = secondsLeft <= 8;
-  const normalColor = theme === "cream" ? "text-charcoal/70" : "text-parchment/70";
 
   return (
     <div className="flex items-center justify-center py-4">
       <span
         key={urgent ? secondsLeft : "normal"} // remount each urgent tick to restart the CSS animation
-        className={urgent ? "font-dial text-8xl md:text-9xl text-crimson animate-[timerPulse_1s_ease-out]" : `font-dial text-4xl ${normalColor}`}
+        className={
+          urgent
+            ? "font-dial font-bold text-8xl md:text-9xl text-crimson animate-[timerPulse_1s_ease-out]"
+            : "font-dial font-bold text-6xl md:text-7xl text-crimson"
+        }
       >
         {secondsLeft}
       </span>

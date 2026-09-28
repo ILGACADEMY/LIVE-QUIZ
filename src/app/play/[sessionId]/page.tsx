@@ -36,6 +36,11 @@ interface RevealState {
   questionNumber: number;
   totalQuestions: number;
   isCorrect: boolean | null; // null = they didn't answer in time
+  selectedOption: "A" | "B" | "C" | "D" | null;
+  questionText: string | null;
+  options: { A: string; B: string; C: string; D: string } | null;
+  correctOption: "A" | "B" | "C" | "D" | null;
+  explanation: string | null;
 }
 
 export default function PlayPage({ params: paramsPromise }: { params: Promise<{ sessionId: string }> }) {
@@ -384,24 +389,84 @@ export default function PlayPage({ params: paramsPromise }: { params: Promise<{ 
   }
 
   if (phase === "revealed" && reveal) {
+    const KEYS: ("A" | "B" | "C" | "D")[] = ["A", "B", "C", "D"];
     return (
-      <main className="min-h-screen px-6 py-10 flex flex-col items-center justify-center">
-        <div className="w-full max-w-lg text-center">
-          <p className="text-parchment/40 text-xs mb-6">
+      <main className="min-h-screen px-6 py-10 flex flex-col items-center">
+        <div className="w-full max-w-lg">
+          <p className="text-parchment/40 text-xs mb-6 text-center">
             Question {reveal.questionNumber} of {reveal.totalQuestions}
           </p>
 
-          {/* Correct/incorrect only — no answer text, no explanation, no
-              question content at all. The full breakdown (their answer,
-              the correct one, the explanation, and AI feedback if
-              enabled) shows up later on the results/download page, not
-              here mid-quiz. The presenter's own screen shows the full
-              reveal and response distribution live. */}
-          {reveal.isCorrect === true && <p className="text-gold font-display italic text-5xl mb-4">Correct!</p>}
-          {reveal.isCorrect === false && <p className="text-crimson font-display italic text-5xl mb-4">Not quite</p>}
-          {reveal.isCorrect === null && <p className="text-parchment/60 font-display italic text-5xl mb-4">Time's up</p>}
+          {/* The result card — an icon plus verdict, matching the same
+              gold/crimson/neutral palette used everywhere else on this
+              phone rather than introducing a new accent color just for
+              this screen. */}
+          <div
+            className={`flex flex-col items-center text-center border px-6 py-8 mb-6 ${
+              reveal.isCorrect === true ? "border-gold bg-gold/5" : reveal.isCorrect === false ? "border-crimson bg-crimson/5" : "border-hairline"
+            }`}
+          >
+            <span
+              className={`w-16 h-16 rounded-full border-2 flex items-center justify-center text-3xl mb-4 ${
+                reveal.isCorrect === true
+                  ? "border-gold text-gold"
+                  : reveal.isCorrect === false
+                    ? "border-crimson text-crimson"
+                    : "border-parchment/40 text-parchment/40"
+              }`}
+            >
+              {reveal.isCorrect === true ? "✓" : reveal.isCorrect === false ? "✕" : "–"}
+            </span>
+            <p
+              className={`font-display italic text-3xl ${
+                reveal.isCorrect === true ? "text-gold" : reveal.isCorrect === false ? "text-crimson" : "text-parchment/60"
+              }`}
+            >
+              {reveal.isCorrect === true ? "Correct!" : reveal.isCorrect === false ? "Not quite" : "Time's up"}
+            </p>
+            {reveal.isCorrect !== true && reveal.correctOption && reveal.options && (
+              <p className="text-parchment/70 text-sm mt-3">
+                The right answer is <span className="text-gold font-semibold">{reveal.correctOption}</span>
+                {reveal.explanation ? `: ${reveal.explanation}` : ""}
+              </p>
+            )}
+          </div>
 
-          <p className="text-parchment/40 text-xs mt-6">Waiting for the instructor to continue…</p>
+          {reveal.questionText && <p className="font-display italic text-xl leading-snug mb-4 text-center">{reveal.questionText}</p>}
+
+          {reveal.options && (
+            <div className="grid grid-cols-1 gap-3">
+              {KEYS.map((key) => {
+                const isCorrectKey = reveal.correctOption === key;
+                const isOwnWrongPick = reveal.selectedOption === key && !isCorrectKey;
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center gap-4 text-left px-5 py-4 border ${
+                      isCorrectKey
+                        ? "border-gold bg-gold/10"
+                        : isOwnWrongPick
+                          ? "border-crimson bg-crimson/5"
+                          : "border-hairline opacity-40"
+                    }`}
+                  >
+                    <span
+                      className={`shrink-0 w-9 h-9 flex items-center justify-center border font-body font-semibold text-sm ${
+                        isCorrectKey ? "border-gold text-gold" : isOwnWrongPick ? "border-crimson text-crimson" : "border-hairline text-parchment/60"
+                      }`}
+                    >
+                      {key}
+                    </span>
+                    <span className={isCorrectKey || isOwnWrongPick ? "text-ivory" : "text-parchment/50"}>{reveal.options![key]}</span>
+                    {isCorrectKey && <span className="ml-auto text-gold text-lg shrink-0">✓</span>}
+                    {isOwnWrongPick && <span className="ml-auto text-crimson text-lg shrink-0">✕</span>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          <p className="text-parchment/40 text-xs mt-6 text-center">Waiting for the instructor to continue…</p>
         </div>
       </main>
     );
