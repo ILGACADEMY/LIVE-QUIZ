@@ -2601,6 +2601,83 @@ Files: `tailwind.config.ts`, `src/components/admin/PresentationView.tsx`,
 `src/components/admin/PresenterTimer.tsx`,
 `src/components/admin/ResponseDistributionChart.tsx`.
 
+## 95. Certificate: removed the microtext line, tightened the wording
+
+The small repeating "MERIDIAN • VERIFIED ACHIEVEMENT..." detail near
+the top kept causing genuine confusion even after shrinking it twice
+— it's purely decorative (never provided real security value, as
+already disclosed), so with it clearly not landing well, removed it
+entirely rather than trying a third size adjustment. The logo now
+starts a little higher, using the space that freed up.
+
+Also tightened the achievement statement itself — the original
+repeated "product" twice ("Product Knowledge Assessment... key
+product features") and read a little loosely for a certificate.
+Reworded to "demonstrating a comprehensive understanding of the
+brand's heritage, collection, technical specifications, and
+distinguishing selling attributes" — no repetition, slightly more
+formal vocabulary, same information.
+
+Verified directly against a freshly generated certificate's actual
+text content: confirmed the microtext is genuinely gone, the new
+wording is present, and re-checked the full vertical layout still
+fits without overlap (the new wording wraps to 3 lines instead of 2,
+verified against jsPDF's real line-wrapping, not assumed).
+
+Files: `src/lib/certificate-pdf.ts`.
+
+## 96. Presenter timer — moved and restyled for prominence
+
+Moved the countdown from its old spot near the top (right after the
+question number, before the question itself) down to sit below the
+answer options and above the progress dots at the very bottom of the
+screen — matching exactly where it was asked to go.
+
+Also restyled it to be bold and red throughout the full countdown,
+not just in the final 8 urgent seconds like before — using the same
+crimson red already proven to work well on both the cream presenter
+view and the dark admin dashboard, since it was already the color
+used for the urgent state on both. The final-seconds version stays
+larger and still pulses, keeping that extra urgency cue on top of the
+now-consistent bold red styling.
+
+Files: `src/components/admin/PresentationView.tsx`,
+`src/components/admin/PresenterTimer.tsx`.
+
+## 97. Participant's phone now shows the full answer breakdown on reveal
+
+Previously deliberate and minimal — the phone showed only "Correct!" /
+"Not quite" / "Time's up," nothing else, by explicit earlier design
+(the full breakdown lived only on the shared presenter screen).
+Replaced with a richer reveal, inspired by a reference screenshot
+shown for a different quiz tool: a result card with an icon (✓ gold
+for correct, ✕ crimson for wrong, – neutral for no answer), the
+question repeated, all four options listed with the correct one
+highlighted and checked, the participant's own wrong pick marked
+separately if they got it wrong, and the explanation shown inline —
+kept in Meridian's own gold/crimson palette rather than copying the
+reference's teal.
+
+Required adding real data to the API response that was previously and
+explicitly left out — the question text, options, correct answer, and
+explanation weren't being sent to the phone at all before. Question
+text and options are localized the same way the live question phase
+already handles translation (reused that exact function rather than
+duplicating the logic); the explanation is shown in English, matching
+how the presenter's own screen already handles it — translating
+explanations isn't something this app does anywhere yet, so this
+doesn't introduce a new inconsistency.
+
+Verified the three real scenarios against the actual rendering logic:
+answered correctly (highlight + check on their own answer, no
+"correct answer" callout needed), answered wrong (their own pick
+marked in crimson, correct one in gold, both distinct), and no answer
+in time (only the correct option highlighted, nothing marked as their
+own pick) — all three behave correctly.
+
+Files: `src/app/api/sessions/[id]/state/route.ts`,
+`src/app/play/[sessionId]/page.tsx`.
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
