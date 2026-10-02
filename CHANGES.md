@@ -2678,6 +2678,45 @@ own pick) — all three behave correctly.
 Files: `src/app/api/sessions/[id]/state/route.ts`,
 `src/app/play/[sessionId]/page.tsx`.
 
+## 98. A real public homepage, and a simple trainer launch flow — admin untouched
+
+The root page previously led straight into "Open Admin" with no other
+option — meaning anyone opening Meridian, including on a screen
+projected to a training room, landed on the admin area as the de
+facto front door. Replaced it with a genuinely public homepage: the
+Meridian wordmark, the new "Turn knowledge into measurable capability"
+headline, the Assess → Learn → Improve → Measure flow, a prominent
+"Start a Session" button, and a small, discreet "ADMIN" link in the
+corner — not competing with the main action.
+
+"Start a Session" leads to a new `/launch` page — a deliberately
+narrow slice of the existing admin quiz library: search, select,
+launch, nothing else. No create, edit, or delete here on purpose;
+those stay in the full admin dashboard. It reuses the exact same
+`/api/quizzes` listing call and the exact same `/api/sessions` launch
+call `QuizLibrary.tsx` already uses — not a reimplementation, the same
+action, so a session launched from here behaves identically to one
+launched from the full dashboard. Still protected by `requireAdmin()`,
+same as every other admin-facing page — quizzes are owned by specific
+accounts, so a trainer still needs to be logged in here, just without
+being shown the rest of the dashboard to do this one thing.
+
+Reused the existing `MeridianWordmark` component for the brand mark on
+the new homepage rather than building a new logo mechanism — it
+already deliberately shows only the text wordmark, no image logo, per
+an earlier decision that Meridian stands on its own as the brand. That
+already is the "leave it blank" state asked for here.
+
+**Verified nothing else was touched**: diffed the entire `src/`
+directory against the previous version before finishing — the only
+changes are the new `/launch` route, the new `LaunchSession.tsx`
+component, and the rewritten root page itself. The admin dashboard,
+every admin sub-page, the quiz engine, and every session/participant
+route are completely unmodified, exactly as instructed.
+
+Files: `src/app/page.tsx` (rewritten), `src/app/launch/page.tsx` (new),
+`src/components/shared/LaunchSession.tsx` (new).
+
 ## Migration note
 
 **If you're upgrading your existing live deployment (you already have this
