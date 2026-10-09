@@ -2727,3 +2727,12 @@ every table you already have, missing all the new columns.
 
 **If you're setting up a fresh Supabase project from scratch:** run
 `supabase/schema.sql` — it already reflects the final state directly.
+
+
+## #99 Live-session load fixes (35-person test failure)
+- Presenter Next click can no longer lock: 8s timeout, broadcast sent after the response (Next `after()`).
+- Presenter screen refreshes at most once/second on broadcasts (was once per answer).
+- Answer route: count broadcast only for first 5 answers then every 10th, sent after the response.
+- Phones: randomised 3-4.5s safety poll; small random spread when a question starts.
+- State route: 0.8s per-instance cache of the session row for participant polls.
+- Added scripts/load-test.mjs (simulated phones). Not yet run against 500 - see notes.
