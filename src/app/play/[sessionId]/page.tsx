@@ -205,7 +205,17 @@ export default function PlayPage({ params: paramsPromise }: { params: Promise<{ 
   useEffect(() => {
     if (!participantId) return;
     fetchState();
-    const poll = setInterval(fetchState, 2500);
+    // Safety-net poll, randomised (3-4.5s) so hundreds of phones never
+    // hit the server in the same instant. Instant transitions come from
+    // the broadcasts below; this only catches anything missed.
+    let pollTimer: ReturnType<typeof setTimeout>;
+    const schedulePoll = () => {
+      pollTimer = setTimeout(async () => {
+        await fetchState();
+        schedulePoll();
+      }, 3000 + Math.random() * 1500);
+    };
+    schedulePoll();
 
     const channel = supabaseBrowser
       .channel(`session:${params.sessionId}`)
@@ -245,7 +255,7 @@ export default function PlayPage({ params: paramsPromise }: { params: Promise<{ 
       .subscribe();
 
     return () => {
-      clearInterval(poll);
+      clearTimeout(pollTimer);
       supabaseBrowser.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,7 +269,9 @@ export default function PlayPage({ params: paramsPromise }: { params: Promise<{ 
       const remaining = Math.ceil((startsAtRef.current - Date.now()) / 1000);
       if (remaining <= 0) {
         clearInterval(tick);
-        fetchState();
+        // Small random spread so a big room doesn't all request the new
+        // question at the exact same millisecond.
+        setTimeout(fetchState, Math.random() * 500);
       } else {
         setCountdownSeconds(remaining);
       }

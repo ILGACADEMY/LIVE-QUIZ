@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -102,9 +102,33 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
   const poll = useCallback(async () => {
-    const res = await fetch(`/api/sessions/${sessionId}/state`);
-    if (res.ok) setState(await res.json());
+    try {
+      const res = await fetch(`/api/sessions/${sessionId}/state`);
+      if (res.ok) setState(await res.json());
+    } catch {
+      /* transient network error — the next poll retries */
+    }
   }, [sessionId]);
+
+  // Broadcast-triggered refreshes are throttled to at most one per second.
+  // Without this, a room of hundreds answering together made the
+  // presenter screen fire hundreds of heavy state requests at once,
+  // queuing the Next click behind them.
+  const lastBroadcastPoll = useRef(0);
+  const pendingBroadcastPoll = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollThrottled = useCallback(() => {
+    const wait = 1000 - (Date.now() - lastBroadcastPoll.current);
+    if (wait <= 0) {
+      lastBroadcastPoll.current = Date.now();
+      poll();
+    } else if (!pendingBroadcastPoll.current) {
+      pendingBroadcastPoll.current = setTimeout(() => {
+        pendingBroadcastPoll.current = null;
+        lastBroadcastPoll.current = Date.now();
+        poll();
+      }, wait);
+    }
+  }, [poll]);
 
   useEffect(() => {
     setJoinUrl(`${window.location.origin}/join/${sessionId}`);
@@ -116,15 +140,15 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   useEffect(() => {
     const channel = supabaseBrowser
       .channel(`session:${sessionId}`)
-      .on("broadcast", { event: "answer_count" }, () => poll())
-      .on("broadcast", { event: "question_revealed" }, () => poll())
-      .on("broadcast", { event: "question_advanced" }, () => poll())
-      .on("broadcast", { event: "quiz_ended" }, () => poll())
+      .on("broadcast", { event: "answer_count" }, () => pollThrottled())
+      .on("broadcast", { event: "question_revealed" }, () => pollThrottled())
+      .on("broadcast", { event: "question_advanced" }, () => pollThrottled())
+      .on("broadcast", { event: "quiz_ended" }, () => pollThrottled())
       .subscribe();
     return () => {
       supabaseBrowser.removeChannel(channel);
     };
-  }, [sessionId, poll]);
+  }, [sessionId, pollThrottled]);
 
   async function start() {
     setBusy(true);
@@ -138,8 +162,18 @@ export default function AdminSessionDashboard({ sessionId }: { sessionId: string
   // /api/sessions/:id/advance for the exact rule.
   async function advance() {
     setBusy(true);
-    await fetch(`/api/sessions/${sessionId}/advance`, { method: "POST" });
-    setBusy(false);
+    // Never leave the button locked: give up waiting after 8s (the server
+    // may still have processed the click — the next poll shows the truth).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    try {
+      await fetch(`/api/sessions/${sessionId}/advance`, { method: "POST", signal: controller.signal });
+    } catch {
+      /* timed out or offline — fall through to a fresh poll */
+    } finally {
+      clearTimeout(timer);
+      setBusy(false);
+    }
     poll();
   }
 

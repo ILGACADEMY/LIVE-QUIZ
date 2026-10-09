@@ -184,16 +184,29 @@ async function selfHealPhase(session: LiveSession): Promise<LiveSession> {
 // With participantId → that one shared question (or the reveal, or
 // waiting/finished), same for everyone, plus this participant's own
 // answered/not-yet-answered status for it.
+const sessionCache = new Map<string, { row: LiveSession; at: number }>();
+
 export async function GET(req: NextRequest, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
   const params = await paramsPromise;
   const participantId = req.nextUrl.searchParams.get("participantId");
 
-  const { data: rawSession, error } = await supabaseAdmin
-    .from("sessions")
-    .select("*")
-    .eq("id", params.id)
-    .single<LiveSession>();
-  if (error || !rawSession) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  // The session row (which carries the whole quiz snapshot) is the
+  // heaviest read here and is identical for every phone in the room.
+  // Participant polls reuse a copy for under a second per server
+  // instance; the presenter's own poll (no participantId) always reads
+  // fresh. Worst case a phone sees a change ~0.8s later — it also gets
+  // the broadcast, and the next poll fixes it.
+  let rawSession: LiveSession | null = null;
+  const cached = participantId ? sessionCache.get(params.id) : undefined;
+  if (cached && Date.now() - cached.at < 800) {
+    rawSession = cached.row;
+  } else {
+    const { data, error } = await supabaseAdmin.from("sessions").select("*").eq("id", params.id).single<LiveSession>();
+    if (error || !data) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    rawSession = data;
+    sessionCache.set(params.id, { row: data, at: Date.now() });
+    if (sessionCache.size > 50) sessionCache.delete(sessionCache.keys().next().value as string);
+  }
 
   const session = await selfHealPhase(rawSession);
   // Used for participant-facing display (the waiting-room description,

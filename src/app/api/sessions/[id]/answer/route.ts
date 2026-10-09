@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { scoreAnswer } from "@/lib/scoring";
 import { broadcastSessionEvent } from "@/lib/realtime";
@@ -148,10 +148,22 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
     .eq("session_id", params.id)
     .eq("question_index", questionIndex);
 
-  await broadcastSessionEvent(params.id, "answer_count", {
-    questionIndex,
-    answered: answeredCount ?? 0
-  });
+  // Load control: a live count broadcast per answer means hundreds of
+  // simultaneous channel connections when a big room answers together
+  // (and blows through Supabase's messages-per-second limit). The
+  // presenter screen polls on its own, so only broadcast the first few
+  // answers and then every 10th one; sent AFTER the response so the
+  // participant's own request never waits on it.
+  const answered = answeredCount ?? 0;
+  if (answered <= 5 || answered % 10 === 0) {
+    after(async () => {
+      try {
+        await broadcastSessionEvent(params.id, "answer_count", { questionIndex, answered });
+      } catch (err) {
+        console.error("answer_count broadcast failed (non-fatal):", err);
+      }
+    });
+  }
 
   // Never return correctness or the correct option here — participants
   // find out together when the presenter (or the timer) reveals it.

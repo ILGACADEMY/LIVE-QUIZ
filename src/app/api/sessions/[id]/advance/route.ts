@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { isAdminRequestAuthorized } from "@/lib/admin-auth";
 import { broadcastSessionEvent } from "@/lib/realtime";
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
         .eq("session_id", params.id)
         .is("completed_at", null);
 
-      await broadcastSessionEvent(params.id, "quiz_ended", { deleted: false });
+      after(() => broadcastSessionEvent(params.id, "quiz_ended", { deleted: false }).catch((e) => console.error("broadcast failed:", e)));
       return NextResponse.json({ phase: "finished" });
     }
 
@@ -113,10 +113,15 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
       .eq("phase", fromPhase); // guards against a double-click race
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    await broadcastSessionEvent(params.id, "question_advanced", {
-      questionIndex: nextIndex,
-      startsAt: startedAt.toISOString()
-    });
+    // Sent after the response so a slow/overloaded realtime service can
+    // never keep the presenter's Next button locked. Phones also pick
+    // the change up from their regular status check.
+    after(() =>
+      broadcastSessionEvent(params.id, "question_advanced", {
+        questionIndex: nextIndex,
+        startsAt: startedAt.toISOString()
+      }).catch((e) => console.error("broadcast failed:", e))
+    );
     return NextResponse.json({ phase: "question", questionIndex: nextIndex });
   }
 
@@ -143,9 +148,11 @@ export async function POST(req: NextRequest, { params: paramsPromise }: { params
       await preWarmQuestionTranslations(params.id, nextIndex, nextItem);
     }
 
-    await broadcastSessionEvent(params.id, "question_revealed", {
-      questionIndex: session.current_question_index
-    });
+    after(() =>
+      broadcastSessionEvent(params.id, "question_revealed", {
+        questionIndex: session.current_question_index
+      }).catch((e) => console.error("broadcast failed:", e))
+    );
     return NextResponse.json({ phase: "revealed" });
   }
 
